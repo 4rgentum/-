@@ -1,0 +1,33 @@
+% =====================================================================
+%  Пользовательские команды и сокращения
+% =====================================================================
+
+% Краткие ссылки
+\newcommand{\figref}[1]{рисунок~\ref{#1}}
+\newcommand{\Figref}[1]{Рисунок~\ref{#1}}
+\newcommand{\tabref}[1]{таблица~\ref{#1}}
+\newcommand{\Tabref}[1]{Таблица~\ref{#1}}
+\newcommand{\eqnref}[1]{(\ref{#1})}
+\newcommand{\secref}[1]{раздел~\ref{#1}}
+
+% Английские сокращения как термины
+\newcommand{\eng}[1]{\textit{#1}}
+
+% Метки общих обозначений
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\softmax}{softmax}
+\DeclareMathOperator{\sigm}{\sigma}
+\DeclareMathOperator{\KL}{KL}
+\DeclareMathOperator{\MMD}{MMD}
+\DeclareMathOperator{\PSI}{PSI}
+
+% Векторы и матрицы — обычным начертанием в соответствии с ГОСТ 7.32
+% (без полужирного, как принято в большинстве отечественных НИР)
+
+% Окружение для алгоритмов
+\newtheoremstyle{algodef}{8pt}{8pt}{\normalfont}{}{\bfseries}{.}{0.5em}{}
+\theoremstyle{algodef}
+\newtheorem{algorithm}{Алгоритм}[section]
+\newtheorem{definition}{Определение}[section]
+\newtheorem{statement}{Утверждение}[section]

@@ -1,0 +1,99 @@
+% =====================================================================
+%  Подключаемые пакеты LaTeX
+%  Сборка: XeLaTeX + Biber
+%  Соответствие: ГОСТ 7.32-2017, ГОСТ Р 7.0.100-2018
+% =====================================================================
+
+% Кодировка и язык
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\setsansfont{Arial}
+\setmonofont{Courier New}
+
+\usepackage{polyglossia}
+\setdefaultlanguage{russian}
+\setotherlanguage{english}
+
+% Геометрия страницы (ГОСТ 7.32-2017, п. 6.1):
+% левое 30 мм, правое 15 мм, верхнее 20 мм, нижнее 20 мм
+\usepackage[
+    a4paper,
+    left=30mm,
+    right=15mm,
+    top=20mm,
+    bottom=20mm,
+    footskip=10mm
+]{geometry}
+
+% Межстрочный интервал 1.5 (ГОСТ 7.32-2017, п. 6.3)
+\usepackage{setspace}
+\onehalfspacing
+
+% Абзацный отступ 1.25 см
+\usepackage{indentfirst}
+\setlength{\parindent}{1.25cm}
+
+% Математика
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{mathtools}
+
+% Графика и таблицы
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+
+% Цвет, ссылки, листинги
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+    pdfencoding=auto,
+    bookmarksnumbered=true,
+    bookmarksopen=true,
+    colorlinks=false
+}
+\usepackage{listings}
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    showstringspaces=false,
+    keywordstyle=\bfseries,
+    columns=fullflexible,
+    captionpos=b,
+    frame=single,
+    aboveskip=8pt,
+    belowskip=8pt
+}
+
+% Перечисления и списки
+\usepackage{enumitem}
+\setlist{nosep, leftmargin=*}
+
+% Заголовки и оглавление
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Библиография по ГОСТ Р 7.0.100-2018
+\usepackage[
+    backend=biber,
+    style=gost-numeric,
+    language=auto,
+    sorting=none,
+    maxbibnames=4,
+    minbibnames=1
+]{biblatex}
+
+% Дополнительные служебные пакеты
+\usepackage{csquotes}
+\usepackage{etoolbox}
+\usepackage{url}
+\usepackage{microtype}
+\usepackage{xurl}
