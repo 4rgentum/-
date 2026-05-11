@@ -1,0 +1,375 @@
+\section{Теоретический анализ методов обнаружения аномалий и обоснование требований к системе}
+\label{ch:theory}
+
+\noindent
+\textit{Содержание главы соответствует первому этапу постановки
+задачи (см.~ВКР, Этап~1): изучение литературы и существующих методов
+обнаружения аномалий в сетевом трафике; анализ систем IDS/IPS и их
+компонентов; обзор методов создания ИИ-злоумышленника; формулировка
+гипотезы исследования и требований к системе.}\\
+
+\subsection{Корпоративная сеть как объект мониторинга}
+
+Под корпоративной сетью в настоящей работе понимается совокупность
+взаимосвязанных программно-аппаратных средств, обеспечивающих обмен
+данными между рабочими станциями, серверами, сетевым оборудованием и
+внешними сегментами. С точки зрения мониторинга безопасности
+корпоративная сеть характеризуется тремя свойствами, существенными
+для построения NIDS:
+
+\begin{enumerate}
+    \item высокой неоднородностью трафика, приводящей к мультимодальному
+    распределению признаков и затрудняющей применение единых пороговых
+    правил~\cite{khraisat2019survey, ahmad2021nids};
+    \item доминированием легитимного трафика, что создаёт сильный
+    дисбаланс классов и требует специализированных методов обучения
+    и оценки~\cite{sommer2010outside, chawla2002smote, lin2017focal};
+    \item динамичностью характеристик, приводящей к явлению дрейфа
+    распределений~\cite{gama2014drift, andresini2021insomnia}.
+\end{enumerate}
+
+Объектами мониторинга в работе принимаются: сетевые соединения
+(flow) на уровне L3/L4, сессии прикладного уровня и временные
+последовательности соединений в скользящих окнах. Это согласуется
+с подходом, принятым в большинстве современных систем сетевого
+анализа трафика и в открытых
+датасетах~\cite{moustafa2015unsw, sharafaldin2018toward}.
+
+В качестве рабочей таксономии угроз использована классификация
+датасета UNSW-NB15, выделяющая девять семейств атакующего трафика:
+\emph{Fuzzers, Analysis, Backdoors, DoS, Exploits, Generic,
+Reconnaissance, Shellcode, Worms}~\cite{moustafa2015unsw}.
+
+\subsection{Классификация и принципы построения IDS}
+
+В соответствии с устоявшейся в литературе типологией IDS делятся на
+три класса~\cite{khraisat2019survey, ahmad2021nids, ferrag2020dlcyber}:
+\textbf{сигнатурные} (совпадение с заранее заданным шаблоном),
+\textbf{аномальные} (отклонение от модели нормы) и \textbf{гибридные}.
+Сигнатурный класс обеспечивает высокую точность по известным угрозам,
+но не способен обнаруживать ранее не встречавшиеся атаки (\eng{zero-day}).
+Аномальный класс расширяет покрытие на неизвестные сценарии за счёт
+повышенной частоты ложных срабатываний и чувствительности к дрейфу.
+
+С точки зрения исходного представления данных различают \emph{packet-based}
+(анализ полезной нагрузки, DPI) и \emph{flow-based} анализ.
+Стандартами экспорта flow-записей являются Cisco NetFlow~\cite{rfc3954} и
+IETF IPFIX~\cite{rfc7011}. В настоящей работе принят flow-based подход
+по причине его совместимости с шифрованным трафиком, ресурсной
+эффективности и прямой переносимости на инфраструктуры реальных
+корпоративных сетей.
+
+\subsection{Методы обнаружения аномалий}
+
+Постановка задачи: для пространства признаков \(X \subseteq \mathbb{R}^d\)
+требуется построить функцию скоринга \(s\colon X \to \mathbb{R}\) и
+порог \(\tau\) такие, что
+\begin{equation}
+\hat{y}(x) = \mathbb{I}\bigl[s(x) > \tau\bigr],
+\quad x \in X,
+\label{eq:detector}
+\end{equation}
+где \(\hat{y}(x) = 1\) интерпретируется как ``аномалия / атака''.
+
+\textbf{Статистические и энтропийные методы.} Простейший подход ---
+\(z\)-оценка и многомерное расстояние Махаланобиса:
+\begin{equation}
+d_M(x) = \sqrt{(x-\mu)^{\top}\Sigma^{-1}(x-\mu)}.
+\label{eq:mahalanobis}
+\end{equation}
+Энтропия Шеннона \(H(P) = -\sum_a P(a)\log P(a)\) используется для
+оценки распределений IP-адресов и портов в скользящем окне.
+
+\textbf{Isolation Forest}~\cite{liu2008isolation} определяет
+скоринг через ожидаемую глубину изоляции точки:
+\begin{equation}
+s(x, n) = 2^{-\frac{\mathbb{E}[h(x)]}{c(n)}},\quad
+c(n) \approx 2(\ln(n-1) + 0.5772) - \frac{2(n-1)}{n}.
+\label{eq:iforest}
+\end{equation}
+Метод имеет линейную сложность и хорошо подходит для unsupervised-режима.
+
+\textbf{One-Class SVM}~\cite{scholkopf2001ocsvm} ищет в спрямляющем
+пространстве минимальную гиперсферу, содержащую долю \(1-\nu\)
+обучающих наблюдений; параметр \(\nu \in (0,1]\) задаёт верхнюю
+оценку доли выбросов.
+
+\subsection{Глубинное обучение для анализа flow-данных}
+
+В работе рассмотрено восемь типов нейросетевых архитектур.
+
+\textbf{MLP} реализуется рекурсией
+\(h^{(l)} = \phi(W^{(l)} h^{(l-1)} + b^{(l)})\) и служит нижней
+границей DL-моделей.
+
+\textbf{1D-CNN} применяет операцию свёртки
+\((h * w)_t = \sum_{k=0}^{K-1} w_k h_{t-k}\) для извлечения локальных
+паттернов в скользящем окне.
+
+\textbf{LSTM}~\cite{hochreiter1997lstm} вводит ячейку состояния
+\(c_t\) и три гейта:
+\begin{align}
+i_t &= \sigma(W_i [h_{t-1}, x_t] + b_i), \nonumber\\
+f_t &= \sigma(W_f [h_{t-1}, x_t] + b_f), \nonumber\\
+o_t &= \sigma(W_o [h_{t-1}, x_t] + b_o), \nonumber\\
+\tilde{c}_t &= \tanh(W_c [h_{t-1}, x_t] + b_c), \nonumber\\
+c_t &= f_t \odot c_{t-1} + i_t \odot \tilde{c}_t, \nonumber\\
+h_t &= o_t \odot \tanh(c_t).
+\label{eq:lstm}
+\end{align}
+Гейтовая структура обеспечивает устойчивое распространение градиента и
+способность хранить долгосрочный контекст --- свойство, востребованное
+при обнаружении медленных атак.
+
+\textbf{GRU}~\cite{cho2014gru} --- упрощённая RNN с двумя гейтами;
+\textbf{BiLSTM} использует прямой и обратный LSTM для двунаправленного
+контекста.
+
+\textbf{Гибрид CNN-LSTM} применяет последовательное преобразование
+\[
+x_t \xrightarrow{\text{Conv1D}} z_t \xrightarrow{\text{LSTM}} h_t
+\xrightarrow{\text{FC}} \hat{p}_t,
+\]
+сочетая локальные паттерны и временные зависимости.
+
+\textbf{TCN}~\cite{bai2018tcn} использует причинные дилатированные
+свёртки с экспоненциально растущим рецептивным полем.
+
+\textbf{Transformer-encoder}~\cite{vaswani2017attention} основан на
+само-внимании:
+\begin{equation}
+\operatorname{Attention}(Q, K, V) =
+\operatorname{softmax}\!\left(\frac{QK^{\top}}{\sqrt{d_k}}\right) V.
+\label{eq:attention}
+\end{equation}
+
+\textbf{Autoencoder и VAE.} Автоэнкодер минимизирует ошибку
+реконструкции \(\|x - D(E(x))\|^2\); вариационный
+автоэнкодер~\cite{kingma2014vae} обучает вероятностное кодирование
+максимизацией ELBO:
+\begin{equation}
+\mathcal{L}_{\text{VAE}} =
+\mathbb{E}_{q(z|x)}[\log p(x|z)] - \KL(q(z|x)\|p(z)).
+\label{eq:vae}
+\end{equation}
+
+Качественное сравнение архитектур по характеристикам приведено в
+\tabref{tab:dl-arch-compare}.
+
+\begin{table}[H]
+\centering
+\caption{Качественное сравнение нейросетевых архитектур для NIDS}
+\label{tab:dl-arch-compare}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{@{}lXXXX@{}}
+\toprule
+\textbf{Модель} & \textbf{Локальные паттерны} & \textbf{Временные зависимости} &
+\textbf{Сложность обучения} & \textbf{Inference latency} \\
+\midrule
+MLP        & нет          & нет        & низкая  & низкая \\
+1D-CNN     & да           & ограничено & средняя & низкая \\
+LSTM       & нет          & да         & средняя & средняя \\
+GRU        & нет          & да         & средняя & низкая \\
+BiLSTM     & нет          & двунаправ. & высокая & средняя \\
+CNN-LSTM   & да           & да         & высокая & средняя \\
+TCN        & да           & фиксиров.  & средняя & низкая \\
+Transformer & через attention & да     & высокая & средняя \\
+AE / VAE   & косвенно     & нет        & средняя & низкая \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Моделирование атак с использованием ИИ}
+
+В литературе выделяют три семейства подходов к формированию атакующего
+трафика для тестирования NIDS:
+
+\begin{enumerate}
+    \item \textbf{Шаблонная (\eng{rule-based, template-based}) генерация}:
+    атаки задаются параметрическими шаблонами потоков;
+    применение --- от классических работ DARPA/KDD до утилит
+    \eng{traffic replay}~\cite{lippmann2000darpa, gharib2016evalframework}.
+    \item \textbf{Генеративные модели}: GAN, cGAN, WGAN, VAE для синтеза
+    реалистичных flow-векторов и последовательностей. Эталонная
+    работа --- Ring и соавт.~\cite{ring2019flowgan}; вариационные подходы ---
+    \cite{lopez2017cvae}.
+    \item \textbf{Adversarial-агенты на обучении с подкреплением}:
+    агент обучается формировать последовательности действий,
+    обходящих детектор~\cite{apruzzese2020adversarial}.
+\end{enumerate}
+
+Классическая постановка GAN~\cite{goodfellow2014gan}:
+\begin{equation}
+\min_{G}\max_{D}
+V(D,G) = \mathbb{E}_{x \sim p_{\text{data}}}[\log D(x)] +
+         \mathbb{E}_{z \sim p_z}[\log(1 - D(G(z)))].
+\label{eq:gan}
+\end{equation}
+Conditional GAN~\cite{mirza2014cgan} вводит обусловливающую переменную
+\(c\) (тип атаки); WGAN-GP~\cite{arjovsky2017wgan, gulrajani2017wgangp}
+заменяет JS-расстояние Wasserstein-1 и обеспечивает 1-липшицевость
+дискриминатора через градиентный штраф.
+
+В рамках настоящей работы обоснован выбор \textbf{гибридной шаблонной
+архитектуры} ИИ-злоумышленника:
+\[
+\text{Templates} + \text{FSM-планировщик} + \text{Drift-инжектор}
+\]
+без cGAN-составляющей. Аргументы: высокая воспроизводимость и
+прозрачная ground-truth, семантическая согласованность шаблонов
+с таксономией UNSW-NB15, отсутствие риска коллапса режима,
+интерпретируемость для аналитика SOC. cGAN сохраняется в обзоре
+как теоретическая альтернатива и направление дальнейшего развития.
+
+\subsection{Сравнительный анализ датасетов NIDS}
+
+В \tabref{tab:datasets-compare} приведена сводная экспертная оценка
+десяти публично доступных датасетов NIDS по восьми
+критериям, систематизированным в~\cite{gharib2016evalframework,
+sharafaldin2018toward}.
+
+\begin{table}[H]
+\centering
+\caption{Сводное сравнение публично доступных датасетов NIDS}
+\label{tab:datasets-compare}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{3pt}
+\small
+\begin{tabularx}{\linewidth}{@{}lcccccccX@{}}
+\toprule
+\textbf{Датасет} & \textbf{K1} & \textbf{K2} & \textbf{K3} & \textbf{K4} &
+\textbf{K5} & \textbf{K6} & \textbf{K7} & \textbf{K8: ограничения} \\
+\midrule
+KDDCup99~\cite{tavallaee2009nslkdd}            & $-$    & $-$ & $-$ & $\circ$ & $\circ$ & $-$    & $+$ & устаревшая модель угроз \\
+NSL-KDD~\cite{tavallaee2009nslkdd}             & $-$    & $-$ & $\circ$ & $+$ & $\circ$ & $-$    & $+$ & таксономия 1998~г.; малый объём для DL \\
+\textbf{UNSW-NB15}~\cite{moustafa2015unsw}     & $+$    & $+$ & $+$ & $\circ$ & $+$    & $+$    & $+$ & доминирование Generic \\
+CICIDS2017~\cite{sharafaldin2018toward}        & $+$    & $+$ & $\circ$ & $\circ$ & $+$    & $+$    & $+$ & дефекты разметки; дубликаты \\
+CSE-CIC-IDS2018~\cite{sharafaldin2018toward}   & $+$    & $+$ & $\circ$ & $\circ$ & $+$    & $+$    & $\circ$ & унаследованные дефекты \\
+TON\_IoT~\cite{moustafa2021toniot}             & $+$    & $\circ$ & $+$ & $\circ$ & $+$    & $+$    & $+$ & ориентация на IoT \\
+Bot-IoT~\cite{koroniotis2019botiot}            & $\circ$& $-$ & $+$ & $-$    & $+$    & $+$    & $+$ & доля атак $>97\%$ \\
+Kyoto 2006+~\cite{song2011kyoto}               & $\circ$& $\circ$ & $\circ$ & $\circ$ & $\circ$ & $\circ$ & $\circ$ & honeypot-смещение \\
+DARPA~\cite{lippmann2000darpa}                 & $-$    & $-$ & $\circ$ & $\circ$ & $-$    & $\circ$ & $+$ & 1998~г.; искусственный трафик \\
+LITNET-2020~\cite{damasevicius2020litnet}      & $+$    & $+$ & $\circ$ & $\circ$ & $+$    & $+$    & $\circ$ & таксономический дисбаланс \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\noindent
+K1 --- актуальность; K2 --- репрезентативность нормы;
+K3 --- качество разметки; K4 --- дисбаланс классов;
+K5 --- пригодность для DL; K6 --- flow-формат;
+K7 --- воспроизводимость; K8 --- ограничения.
+``$+$'' --- соответствует, ``$\circ$'' --- частично, ``$-$'' --- нет.
+
+В работе принят датасет \textbf{UNSW-NB15} как основной (наибольшее
+покрытие критериев), \textbf{CICIDS2017} --- как вспомогательный для
+кросс-валидации.
+
+\subsection{Метрики качества}
+
+Для бинарной задачи введены матрица ошибок (\(TP, TN, FP, FN\)) и
+производные метрики:
+\begin{align}
+\text{Precision} &= \frac{TP}{TP + FP},
+\quad
+\text{Recall} = \frac{TP}{TP + FN},
+\label{eq:pr}\\
+\text{F1} &= \frac{2\,\text{Precision}\,\text{Recall}}
+                 {\text{Precision} + \text{Recall}},
+\quad
+\text{FPR} = \frac{FP}{FP + TN}.\label{eq:f1}
+\end{align}
+
+\textbf{MCC} (Matthews correlation coefficient) рекомендуется при
+сильном дисбалансе:
+\begin{equation}
+\text{MCC} =
+\frac{TP \cdot TN - FP \cdot FN}
+{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}}.
+\label{eq:mcc}
+\end{equation}
+
+\textbf{ROC-AUC} и \textbf{PR-AUC} интегрируют качество модели по всем
+порогам; PR-AUC более чувствителен к редкому классу и принят как
+основная интегральная метрика. К эксплуатационным метрикам относятся
+\emph{time-to-detect} (TTD), \emph{inference latency}, \emph{throughput}
+и \emph{FP-per-time}.
+
+\textbf{Температурное масштабирование}~\cite{guo2017calibration}
+согласует выходную вероятность с эмпирической частотой:
+\begin{equation}
+\hat{p}_{T}(y=1\mid x) = \sigma\!\left(\frac{z(x)}{T}\right),
+\label{eq:temp-scaling}
+\end{equation}
+где \(z(x)\) --- логит, \(T\) --- параметр, подбираемый на
+валидационной выборке. Качество калибровки оценивается по ECE
+(\eng{Expected Calibration Error}).
+
+\textbf{Метрики дрейфа.} PSI (Population Stability Index),
+KL-расхождение и MMD (Maximum Mean Discrepancy):
+\begin{align}
+\PSI &= \sum_{b}(p_b - q_b)\ln\frac{p_b}{q_b},
+\label{eq:psi}\\
+\MMD^{2}(P, Q) &= \mathbb{E}_{P,P}[k(x,x')] - 2\mathbb{E}_{P,Q}[k(x,y)]
+                + \mathbb{E}_{Q,Q}[k(y,y')].\label{eq:mmd}
+\end{align}
+
+\subsection{Формализация требований и гипотеза}
+
+Концептуальная модель системы состоит из трёх подсистем:
+предобработки, детекции и активного тестирования
+(ИИ-злоумышленник). Сформированы 10 функциональных и 9 нефункциональных
+требований; ключевые количественные пороги приведены в
+\tabref{tab:requirements}.
+
+\begin{table}[H]
+\centering
+\caption{Ключевые нефункциональные требования к системе}
+\label{tab:requirements}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{@{}lXl@{}}
+\toprule
+\textbf{ID} & \textbf{Содержание} & \textbf{Порог} \\
+\midrule
+NFR-1 & F1 на UNSW-NB15 (binary) & $\geq 0{,}90$ \\
+NFR-1 & PR-AUC на UNSW-NB15      & $\geq 0{,}95$ \\
+NFR-2 & FPR при Recall $\geq 0{,}85$ & $\leq 0{,}01$ \\
+NFR-3 & Inference latency (CPU, batch=1) & $\leq 50$ мс/окно \\
+NFR-4 & Throughput (CPU, батч)           & $\geq 1000$ EPS \\
+NFR-5 & Time-to-detect (DDoS / Scan / Brute) & $\leq 1$ окна \\
+NFR-6 & $\Delta\text{F1}$ при PSI $\leq 0{,}25$ & $\leq 0{,}10$ \\
+NFR-7 & Перенос UNSW $\to$ CICIDS2017 без дообуч. ($\Delta\text{F1}$) & $\leq 0{,}20$ \\
+NFR-8 & Воспроизводимость одной командой & да \\
+NFR-9 & Стабильность $\sigma_{\text{F1}}$ (\(n \geq 5\) seed) & $\leq 0{,}01$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Формально сформулированы три гипотезы исследования:
+основная \(H_0^{\text{main}}\) о превосходстве CNN-LSTM над ансамблем
+baselines на UNSW-NB15; дополнительная \(H_0^{\text{aux}}\) о роли
+ИИ-злоумышленника в воспроизводимом тестировании; гипотеза
+переносимости \(H_0^{\text{transfer}}\) на CICIDS2017. Проверка
+проводится на этапе~\ref{ch:experiments}.
+
+\subsection*{Выводы по главе 1}
+
+\begin{enumerate}
+    \item Корпоративная сеть как объект мониторинга характеризуется
+    неоднородностью трафика, дисбалансом классов и динамичностью
+    распределений; обоснован выбор flow-уровня анализа,
+    совместимого с NetFlow/IPFIX.
+    \item Сигнатурные, аномальные и гибридные подходы NIDS
+    дополняют, а не заменяют друг друга; в работе принят аномальный
+    нейросетевой подход.
+    \item Рассмотрены восемь типов нейросетевых архитектур, для каждой
+    приведены математические основы; гибрид CNN-LSTM покрывает оба
+    измерения структуры flow-данных и принимается в качестве основной
+    proposed-архитектуры.
+    \item Систематизированы три семейства подходов к моделированию
+    атак; обоснован выбор гибридной шаблонной архитектуры
+    ИИ-злоумышленника без cGAN-составляющей.
+    \item Из десяти датасетов выбран UNSW-NB15 как основной и
+    CICIDS2017 как вспомогательный.
+    \item Сформированы количественные требования и гипотезы исследования.
+\end{enumerate}

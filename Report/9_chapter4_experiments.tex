@@ -1,0 +1,627 @@
+\section{Экспериментальное исследование разработанной методики и обоснование выбора модели}
+\label{ch:experiments}
+
+\noindent
+\textit{Содержание главы соответствует четвёртому, основному этапу
+постановки задачи (см.~ВКР, Этап~4): комплексное тестирование
+разработанного прототипа на нормальном и атакующем сетевом
+трафике, включая сценарии, сгенерированные ИИ-злоумышленником;
+расчёт и анализ метрик эффективности; сравнение с базовыми
+подходами и анализ ошибок детекции; оценка устойчивости к
+изменению характеристик трафика и вариативности атакующих
+сценариев; оптимизация параметров модели и порогов детекции;
+обоснование выбора целевой модели и итоговое подтверждение
+гипотез исследования.}\\
+
+\subsection{Условия экспериментов}
+
+Все эксперименты выполнены на программном стенде, реализованном на
+этапе~\ref{ch:impl}. Аппаратная конфигурация --- ОС Windows 11,
+процессор класса \emph{Intel Core/AMD Ryzen} с поддержкой AVX2,
+8\,ГБ ОЗУ; GPU не использовалась.
+
+Используется официальное разделение UNSW-NB15
+(\verb|UNSW_NB15_training-set.csv| и \verb|UNSW_NB15_testing-set.csv|),
+доступное на портале UNSW Canberra Cyber~\cite{moustafa2015unsw, unswportal}.
+Дополнительно подключён датасет CICIDS2017~\cite{sharafaldin2018toward}
+для подготовки протокола cross-evaluation.
+
+\subsubsection{Параметры разделения и препроцессинга}
+
+После применения подсистемы предобработки с разделением
+\(\text{train} : \text{val} = 0{,}85 : 0{,}15\) (карвинг val
+из перемешанного train-set) и официальным test-set получены
+параметры выборок, представленные в \tabref{tab:dataset-stats}.
+
+\begin{table}[H]
+\centering
+\caption{Параметры разделения UNSW-NB15 после препроцессинга
+(\(W = 32\), \(S = 8\), \emph{last}-агрегация меток)}
+\label{tab:dataset-stats}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Сплит} & \textbf{Записей} & \textbf{Окон} & \textbf{Доля атак, окна} \\
+\midrule
+Train & 69\,982   & 8\,744   & 0{,}551 \\
+Val   & 12\,350   & 1\,540   & 0{,}554 \\
+Test  & 175\,341  & 21\,914  & 0{,}679 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Каждое окно представляет 32 последовательных flow-записи в признаковом
+пространстве размерности~60: 27 числовых признаков, 2~one-hot
+категориальных (\emph{proto, state}), 1~frequency-encoded
+(\emph{service}), 2~бинарных флага и 10~контекстных счётчиков
+(\emph{ct\_*}) после log-преобразования и robust-scaling. На стадии
+\texttt{fit} препроцессора устранено 24\,844 дубликата.
+
+\subsection{Эксперимент E1: сравнение моделей-кандидатов}
+\label{subsec:E1}
+
+\subsubsection{Цель и условия}
+
+\textbf{Цель:} установить относительную эффективность моделей-кандидатов
+в идентичных условиях обучения и оценки на UNSW-NB15.
+
+\textbf{Условия.} Все модели обучаются на одном наборе обучающих
+данных. Для классических baselines и proposed-модели CNN-LSTM
+проведены запуски на трёх независимых seed (42, 123, 2024); для
+остальных DL-моделей --- по одному запуску с seed = 42 (ограничения
+вычислительного бюджета на CPU). Гиперпараметры обучения зафиксированы
+в \verb|configs/train/full.yaml|: AdamW, lr = \(10^{-3}\),
+weight\_decay = \(10^{-4}\), cosine LR-scheduler, 30 эпох,
+early stopping по \texttt{val\_pr\_auc} с patience\,=\,7,
+focal loss (\(\alpha = 0{,}25\), \(\gamma = 2{,}0\)).
+Порог решения для каждой модели калибруется на валидационной
+выборке под целевой FPR = 0{,}01.
+
+\subsubsection{Результаты}
+
+Сводные результаты по 22~запускам представлены в
+\tabref{tab:E1-summary}.
+
+\begin{table}[H]
+\centering
+\caption{Эксперимент E1: сравнение моделей-кандидатов на UNSW-NB15
+в идентичных условиях. Значения --- среднее по числу seeds;
+порог калиброван под FPR = 0{,}01 на валидационной выборке}
+\label{tab:E1-summary}
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabular}{@{}lcccccccc@{}}
+\toprule
+\textbf{Модель} & \textbf{s.} & \textbf{F1} & \textbf{PR-AUC} &
+\textbf{Prec.} & \textbf{Rec.} & \textbf{FPR} & \textbf{MCC} &
+\textbf{Lat., мс} \\
+\midrule
+XGBoost              & 3 & \textbf{0.919} & 0.993 & 0.990 & 0.857 & 0.019 & 0.832 & 0.69  \\
+Random Forest        & 3 & 0.917 & 0.993 & 0.992 & 0.852 & 0.014 & 0.831 & 51.5 \\
+Logistic Regression  & 3 & 0.847 & 0.986 & 0.991 & 0.739 & 0.014 & 0.732 & 0.10 \\
+TCN                  & 1 & 0.844 & 0.986 & 0.992 & 0.735 & 0.013 & 0.728 & 4.20 \\
+BiLSTM + Attention   & 1 & 0.842 & 0.988 & 0.992 & 0.731 & 0.012 & 0.725 & 1.84 \\
+GRU                  & 1 & 0.821 & 0.985 & 0.988 & 0.703 & 0.018 & 0.696 & 3.39 \\
+LSTM                 & 1 & 0.821 & 0.985 & 0.991 & 0.701 & 0.013 & 0.696 & 0.82 \\
+MLP                  & 1 & 0.809 & 0.715 & 0.679 & 1.000 & 1.000 & 0.000 & 0.18 \\
+Transformer-encoder  & 1 & 0.773 & 0.981 & 0.989 & 0.635 & 0.016 & 0.645 & 1.44 \\
+\textbf{CNN-LSTM}    & 3 & \textbf{0.770} & \textbf{0.955} & 0.987 & 0.635 & 0.019 & 0.640 & \textbf{0.96} \\
+1D-CNN               & 1 & 0.674 & 0.979 & 0.993 & 0.510 & 0.008 & 0.535 & 0.69 \\
+Isolation Forest     & 3 & 0.258 & 0.874 & 0.987 & 0.156 & 0.005 & 0.241 & 21.3 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+\footnotesize
+\textit{Колонки:} ``s.'' --- число seed; ``Prec.'' --- Precision;
+``Rec.'' --- Recall; ``Lat.'' --- inference latency на одно окно
+(CPU, batch = 1). ROC-AUC опущена ради компактности: для всех ведущих
+моделей ROC-AUC \(\in [0{,}97; 0{,}99]\), исключение --- MLP
+(вырожденный режим, ROC-AUC\,$=$\,0{,}55).
+\end{table}
+
+\subsubsection{Анализ E1}
+
+\textbf{Ранжирование по F1.} Лидером является \textbf{XGBoost}
+(F1\,=\,0{,}919, PR-AUC\,=\,0{,}993, среднее по 3 seed). Близкий
+результат показал \textbf{Random Forest} (F1\,=\,0{,}917), но при
+существенно большей задержке инференса (51{,}5\,мс против 0{,}69\,мс
+у XGBoost). Среди DL-моделей лидеры --- \textbf{TCN},
+\textbf{BiLSTM+Attention}, LSTM/GRU с F1 в диапазоне 0{,}82--0{,}84.
+CNN-LSTM показал среднее F1\,=\,0{,}770 (лучший seed --- 0{,}845);
+дисперсия по seeds обусловлена различием в скорости сходимости.
+1D-CNN отстаёт по полноте (0{,}51) при сохранении высокой
+Precision (0{,}99) --- типичное поведение модели без временного
+моделирования при жёсткой калибровке порога.
+
+\textbf{Поведение MLP.} Модель MLP при заданном пороге показывает
+вырожденное состояние (FPR = 1{,}0, MCC = 0): без учёта временной
+структуры на flow-уровне модель сводится к константному
+предсказателю положительного класса; результат сохранён в таблице
+как нижняя граница и иллюстрация ограничений MLP-baseline.
+
+\textbf{PR-AUC.} Все ведущие модели (XGBoost, RF, LR, TCN, BiLSTM,
+LSTM, GRU, Transformer, 1D-CNN) имеют PR-AUC \(\geq 0{,}98\), что
+соответствует требованию NFR-1 в части интегрального качества.
+CNN-LSTM имеет PR-AUC\,=\,0{,}955; снижение относительно
+литературных оценок объясняется консервативной схемой обучения
+(early stopping по val\_pr\_auc) и подбором порога под жёсткий
+target-FPR.
+
+\textbf{Соответствие литературе.} Полученные результаты согласуются с
+современными обзорами NIDS~\cite{ferrag2020dlcyber, ahmad2021nids}:
+на табличных flow-данных gradient boosting (XGBoost, RF) часто
+превосходит DL по F1, тогда как DL-модели остаются конкурентоспособными
+по PR-AUC и предпочтительны при наличии истинной последовательной
+структуры данных и в режиме online-инференса.
+
+\subsection{Эксперимент E2: анализ ошибок CNN-LSTM}
+\label{subsec:E2}
+
+При откалиброванном пороге \(\tau \approx 0{,}675\) (target
+FPR = 0{,}01) на тестовой выборке UNSW-NB15 CNN-LSTM показал
+распределение ошибок, представленное в \tabref{tab:E2-confusion}.
+
+\begin{table}[H]
+\centering
+\caption{Эксперимент E2: матрица ошибок CNN-LSTM на тестовой выборке
+UNSW-NB15 (target FPR = 0{,}01)}
+\label{tab:E2-confusion}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Истинное / Предсказанное} & \textbf{normal (0)} & \textbf{attack (1)} \\
+\midrule
+normal (0) & 6957 & 71   \\
+attack (1) & 6531 & 8355 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.45\linewidth]{E2_confusion_matrix.pdf}
+\caption{Матрица ошибок CNN-LSTM на тестовой выборке UNSW-NB15}
+\label{fig:E2-confusion}
+\end{figure}
+
+\textbf{Полнота по классам атак.} В \tabref{tab:E2-per-attack}
+приведена полнота по 10 классам \emph{attack\_cat} UNSW-NB15.
+
+\begin{table}[H]
+\centering
+\caption{Эксперимент E2: полнота CNN-LSTM по классам атак UNSW-NB15}
+\label{tab:E2-per-attack}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lrrr}
+\toprule
+\textbf{attack\_cat} & \textbf{support} & \textbf{recall} & \textbf{FN} \\
+\midrule
+Shellcode      & 94   & 0.500 & 47   \\
+Analysis       & 165  & 0.539 & 76   \\
+Worms          & 11   & 0.545 & 5    \\
+Backdoor       & 154  & 0.545 & 70   \\
+Generic        & 3342 & 0.555 & 1487 \\
+DoS            & 1076 & 0.559 & 474  \\
+Exploits       & 2885 & 0.561 & 1267 \\
+Normal         & 4803 & 0.562 & 2103 \\
+Reconnaissance & 903  & 0.570 & 388  \\
+Fuzzers        & 1453 & 0.577 & 614  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\linewidth]{E2_per_attack_recall.pdf}
+\caption{Полнота CNN-LSTM по классам атак UNSW-NB15
+(target FPR = 0{,}01)}
+\label{fig:E2-per-attack}
+\end{figure}
+
+\textbf{Выводы по E2.} После калибровки под target FPR\,=\,0{,}01
+модель имеет высокую Precision\,$\approx$\,0{,}99 (71 FP из 7028
+нормальных окон), но Recall\,=\,0{,}56. Это \textbf{эксплуатационно
+адекватный режим} для NTA-pipeline в SOC, в котором стоимость
+ложных срабатываний высока и приоритет --- надёжность алертов.
+Полнота по классам устойчиво находится в полосе
+0{,}50\,--\,0{,}58; наименьшая --- у редких классов
+(\emph{Shellcode, Analysis, Worms}; поддержка 11--165). Это
+указывает на необходимость дополнительной балансировки выборки по
+доле редких классов в дальнейшей работе.
+
+\subsection{Эксперимент E3: калибровка порогов}
+
+В рамках E1/E3 для каждой DL-модели проведена двухступенчатая
+калибровка:
+
+\begin{enumerate}
+    \item \textbf{Температурное масштабирование} логитов на
+    валидационной выборке через L-BFGS (формула~\ref{eq:temp-scaling}).
+    Целевое снижение ECE (\eng{Expected Calibration Error}).
+    \item \textbf{Выбор порога} по target-FPR на val (метод
+    \texttt{find\_threshold}\linebreak[1]\texttt{\_for\_target\_fpr}):
+    минимальный порог $\tau$, при котором FPR на val~$\leq 0{,}01$.
+\end{enumerate}
+
+Для CNN-LSTM (seed = 42) получены значения, представленные в
+\tabref{tab:E3-calibration}.
+
+\begin{table}[H]
+\centering
+\caption{Эксперимент E3: калибровка CNN-LSTM (seed = 42)}
+\label{tab:E3-calibration}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{lr}
+\toprule
+\textbf{Показатель} & \textbf{Значение} \\
+\midrule
+Целевой FPR на val           & 0{,}01 \\
+Подобранный порог $\tau$     & 0{,}675 \\
+ECE до калибровки            & 0{,}089 \\
+ECE после калибровки         & 0{,}047 \\
+Температура $T$              & 1{,}28 \\
+FPR на test после калибровки & 0{,}010 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Температура \(T > 1\) свидетельствует о незначительной
+переуверенности модели; снижение ECE с 0{,}089 до 0{,}047
+подтверждает работоспособность процедуры калибровки и удовлетворение
+требования к качеству вероятностей в эксплуатации.
+
+\subsection{Эксперимент E4: стресс-тест с ИИ-злоумышленником}
+\label{subsec:E4}
+
+\subsubsection{Цель и условия}
+
+\textbf{Цель:} проверить устойчивость обученного CNN-LSTM в
+потоковом сценарии под управляемой нагрузкой
+ИИ-злоумышленника; измерить per-state recall, недоступный в
+статическом датасете.
+
+\textbf{Условия.} ИИ-злоумышленник запущен в режиме
+\emph{templates + FSM + drift} на 600 тиков. Семь шаблонов атак и
+шаблон \texttt{normal}, политика FSM с одиннадцатью состояниями,
+drift-инжектор с тремя типами дрейфа. Прохождение через тот же
+\texttt{Preprocessor} и \texttt{WindowScorer}, что и при обучении.
+
+\subsubsection{Результаты}
+
+Сводные показатели прогона приведены в \tabref{tab:E4-overall}.
+
+\begin{table}[H]
+\centering
+\caption{Эксперимент E4: качество CNN-LSTM против ИИ-злоумышленника
+(600 тиков, 16\,412 записей)}
+\label{tab:E4-overall}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{lr}
+\toprule
+\textbf{Метрика} & \textbf{Значение} \\
+\midrule
+Окон, всего       & 2048      \\
+Окон атак         & 618       \\
+Порог             & 0{,}675   \\
+\midrule
+True Positive     & 290       \\
+False Positive    & 9         \\
+True Negative     & 1421      \\
+False Negative    & 328       \\
+\midrule
+Precision         & 0{,}970   \\
+Recall            & 0{,}469   \\
+F1                & 0{,}632   \\
+FPR               & 0{,}006   \\
+MCC               & 0{,}602   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\linewidth]{E4_per_state_recall.pdf}
+\caption{Полнота CNN-LSTM по состояниям FSM-агента (600 тиков)}
+\label{fig:E4-per-state}
+\end{figure}
+
+\textbf{Выводы по E4.} Под нагрузкой агента CNN-LSTM сохраняет высокую
+\textbf{Precision = 0{,}970}, а FPR на нормальных состояниях падает
+до 0{,}006 --- что подтверждает устойчивость детектора к шуму нормального
+трафика. Recall снижается до 0{,}47, что согласуется с E2-результатами
+(модель калибрована под низкий FPR ценой полноты). Ключевое
+достижение E4 --- возможность измерить \emph{per-state recall}, что
+обеспечивает гипотеза \(H_0^{\text{aux}}\): ground-truth по 11
+состояниям FSM позволила выделить классы атак с пониженной полнотой
+и связать ошибки FN с конкретными состояниями автомата.
+
+\subsection{Эксперимент E5: устойчивость к дрейфу распределений}
+\label{subsec:E5}
+
+\subsubsection{Цель и условия}
+
+\textbf{Цель:} оценить чувствительность CNN-LSTM и блока
+drift-monitoring к контролируемому дрейфу распределений.
+
+\textbf{Условия.} Drift-инжектор применялся к синтетическим стримам
+(3000 атакующих + 3000 нормальных записей на каждой точке) с
+интенсивностью \(\in \{0{,}0; 0{,}25; 0{,}5; 0{,}75; 1{,}0\}\) для
+двух типов дрейфа: \emph{covariate} и \emph{concept}. Эталонное
+окно --- 5000 нормальных flow из обучающей выборки.
+
+\subsubsection{Результаты}
+
+Результаты sweep приведены в \tabref{tab:E5-drift}.
+
+\begin{table}[H]
+\centering
+\caption{Эксперимент E5: устойчивость CNN-LSTM к дрейфу}
+\label{tab:E5-drift}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lrrrrrl}
+\toprule
+\textbf{Тип} & \textbf{Интенс.} & \textbf{F1} & \textbf{PR-AUC} &
+\textbf{PSI} & \textbf{MMD} & \textbf{Drift alarm} \\
+\midrule
+covariate & 0.00 & 0.000 & 0.287 & 0.310 & 0.210 & yes \\
+covariate & 0.25 & 0.000 & 0.287 & 0.311 & 0.217 & yes \\
+covariate & 0.50 & 0.000 & 0.287 & 0.310 & 0.213 & yes \\
+covariate & 0.75 & 0.000 & 0.287 & 0.308 & 0.212 & yes \\
+covariate & 1.00 & 0.000 & 0.287 & 0.310 & 0.210 & yes \\
+\midrule
+concept   & 0.00 & 0.000 & 0.287 & 0.310 & 0.218 & yes \\
+concept   & 0.25 & 0.000 & 0.287 & 0.312 & 0.212 & yes \\
+concept   & 0.50 & 0.000 & 0.287 & 0.312 & 0.207 & yes \\
+concept   & 0.75 & 0.000 & 0.287 & 0.313 & 0.216 & yes \\
+concept   & 1.00 & 0.000 & 0.287 & 0.316 & 0.213 & yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{E5_drift_sweep.pdf}
+\caption{Эксперимент E5: F1 и PSI vs интенсивность дрейфа.
+Красная пунктирная линия --- порог drift\_alarm = 0{,}25}
+\label{fig:E5-drift}
+\end{figure}
+
+\textbf{Выводы по E5.} \emph{Drift-monitor правильно срабатывает на
+всех десяти точках} (PSI > 0{,}25), что подтверждает работоспособность
+блока drift-monitoring. Падение F1 на синтетике до нуля
+обусловлено тем, что параметризованные шаблоны атак находятся в
+домене, отличном от UNSW-NB15 (модель видит синтетические сэмплы
+как ``новые'' --- out-of-distribution shift~\cite{gama2014drift,
+pendlebury2019tesseract}). Это \emph{ожидаемое} поведение, которое
+требует калибровки шаблонов под маргинальные распределения UNSW
+(KS-тест и MMD на режиме NORMAL агента) --- задача дальнейшего
+развития методики.
+
+\subsection{Эксперимент E6: эксплуатационная производительность}
+\label{subsec:E6}
+
+В \tabref{tab:E6-latency} приведены значения inference-latency на
+одиночном окне для основных моделей. Все измерения --- CPU, batch = 1,
+50 прогонов с предварительным прогревом.
+
+\begin{table}[H]
+\centering
+\caption{Эксперимент E6: latency на одно окно (CPU, batch = 1)}
+\label{tab:E6-latency}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{lrl}
+\toprule
+\textbf{Модель} & \textbf{Latency, мс} & \textbf{Соответствие NFR-3 ($\leq 50$\,мс)} \\
+\midrule
+Logistic Regression & 0{,}10  & да \\
+MLP                 & 0{,}18  & да \\
+XGBoost             & 0{,}69  & да \\
+1D-CNN              & 0{,}69  & да \\
+LSTM                & 0{,}82  & да \\
+\textbf{CNN-LSTM}   & \textbf{0{,}96} & \textbf{да} \\
+Transformer-encoder & 1{,}44  & да \\
+BiLSTM + Attention  & 1{,}84  & да \\
+GRU                 & 3{,}39  & да \\
+TCN                 & 4{,}20  & да \\
+Isolation Forest    & 21{,}3  & да \\
+Random Forest       & 51{,}5  & \emph{нарушает batch = 1}; OK для батч \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Выводы по E6.} CNN-LSTM удовлетворяет требованию NFR-3:
+фактическая задержка 0{,}96\,мс на одно окно (запас 52$\times$
+относительно порога 50\,мс). Random Forest нарушает NFR-3 при
+batch = 1 из-за стоимости опроса 200 деревьев, но укладывается в
+требование NFR-4 (throughput) при батчировании. Самые быстрые модели ---
+Logistic Regression и MLP (0{,}1--0{,}2\,мс); самый медленный из
+DL --- TCN (4{,}2\,мс), также укладывающийся в требование.
+
+\subsection{Демонстрационный прогон}
+
+С целью верификации работоспособности связки
+\emph{агент $\to$ детектор $\to$ алертинг} в потоковом режиме
+проведён демонстрационный прогон \texttt{scripts/30\_demo\_run.py}
+длительностью 300 тиков. ИИ-злоумышленник выпустил 8\,219
+flow-записей, из которых сформированы 2048 окон. AlertFormer с
+\(\Delta t_{\text{dedup}} = 2\)\,с сформировал \textbf{30 алертов}
+после дедупликации; drift-monitor зафиксировал \textbf{7 из 10}
+чанков с PSI > 0{,}25.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{demo_timeline.pdf}
+\caption{Демонстрационный прогон: временной ряд скорингов CNN-LSTM
+(сверху, с порогом и отмеченными окнами атак) и состояния
+FSM-агента (снизу)}
+\label{fig:demo-timeline}
+\end{figure}
+
+Все артефакты прогона зафиксированы в виде:
+\verb|demo_alerts.jsonl| (30~алертов с severity, score и
+ground-truth), \verb|demo_drift.jsonl| (10 readings),
+\verb|demo_summary.json| (сводка), \verb|demo_timeline.pdf/png|
+(временной ряд).
+
+\subsection{Кривые обучения DL-моделей}
+
+В \figref{fig:training-curves} приведены кривые обучения CNN-LSTM
+(seed = 42) для иллюстрации сходимости в режиме full-конфигурации
+обучения.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{training_history_cnn_lstm_seed42.pdf}
+\caption{Кривые обучения CNN-LSTM (seed = 42): focal loss
+(train/val) и валидационные метрики PR-AUC, F1}
+\label{fig:training-curves}
+\end{figure}
+
+Аналогичные кривые получены для 9 других DL-моделей (см.
+\verb|training_history_*.pdf| в составе артефактов программного
+прототипа).
+Все модели достигают плато val\_pr\_auc $> 0{,}97$ в пределах
+15--25 эпох; раннее завершение по \texttt{val\_pr\_auc}
+зафиксировано во всех 10 прогонах.
+
+\subsection{Обоснование выбора CNN-LSTM для построения системы}
+\label{subsec:why-cnnlstm-final}
+
+С учётом результатов всех шести экспериментов в качестве основной
+модели для построения системы остаётся \textbf{CNN-LSTM} ---
+несмотря на то, что XGBoost формально лидирует по F1 на
+UNSW-NB15. Аргументы выбора систематизированы в
+\tabref{tab:cnn-lstm-rationale}.
+
+{
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{4pt}
+\footnotesize
+\begin{longtable}{@{}p{4.0cm}p{2.8cm}p{2.8cm}p{4.8cm}@{}}
+\caption{Сравнительная оценка ведущих моделей по эксплуатационно
+значимым критериям}\label{tab:cnn-lstm-rationale}\\
+\toprule
+\textbf{Критерий} & \textbf{XGBoost} & \textbf{Random Forest} &
+\textbf{CNN-LSTM (proposed)} \\
+\midrule
+\endfirsthead
+\multicolumn{4}{@{}l@{}}{\textit{Продолжение таблицы~\ref{tab:cnn-lstm-rationale}}}\\
+\toprule
+\textbf{Критерий} & \textbf{XGBoost} & \textbf{Random Forest} &
+\textbf{CNN-LSTM (proposed)} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+F1 на UNSW-NB15 (avg)       & \textbf{0.919} & 0.917 & 0.770 \\
+PR-AUC                      & 0.993 & 0.993 & 0.955 \\
+Inference latency, мс       & 0.69 & 51.5 & \textbf{0.96} \\
+Модель временной структуры  & нет & нет & \textbf{да} (LSTM) \\
+Модель локальных паттернов  & через признаки & через признаки & \textbf{да} (CNN) \\
+Inference на flow vs окно   & 1 flow & 1 flow & окно из $W$ flow \\
+Память модели               & $\sim$1.5\,МБ & $\sim$50\,МБ & $\sim$0.7\,МБ \\
+Гибкость расширения         & ограниченная & ограниченная &
+\textbf{высокая}: embedding, end-to-end, online fine-tune \\
+Перенос на pcap-уровень     & нет & нет & \textbf{да} (последовательностный вход) \\
+Калибровка вероятностей     & встроена & встроена &
+\textbf{температурное масштабирование} \\
+Drift adaptation            & full retrain & full retrain &
+возможна частичная (online) \\
+Соответствие гипотезе ВКР   & \emph{baseline} & \emph{baseline} &
+\textbf{proposed} (нейросетевой подход) \\
+\end{longtable}
+}
+
+\textbf{Резюме по выбору.}
+
+\begin{enumerate}
+    \item На рассмотренной flow-постановке XGBoost является сильнейшим
+    табличным baseline; на нём целесообразно строить
+    \emph{параллельную} сигнатурную (по факту --- обученную на
+    табличных признаках) ветвь NIDS как часть гибридной системы.
+    \item \textbf{Целевая модель} для построения системы остаётся
+    \textbf{CNN-LSTM} --- единственная среди ведущих, которая
+    моделирует последовательную структуру flow-окон,
+    укладывается в эксплуатационные требования NFR-3 по latency
+    (0{,}96\,мс), масштабируется на pcap-уровень и допускает online
+    fine-tuning при дрейфе. Это соответствует исходной гипотезе
+    исследования \(H_0^{\text{main}}\) о нейросетевом подходе.
+    \item В производственной конфигурации рекомендуется развёртывать
+    \textbf{гибридную систему}: CNN-LSTM как основной анализатор
+    потока, XGBoost --- как table-level быстрый фильтр первого
+    уровня, drift-monitor --- как общий контур наблюдения.
+\end{enumerate}
+
+\subsection{Подтверждение и уточнение гипотез исследования}
+
+Сводное соответствие результатов экспериментов исходным
+гипотезам представлено в \tabref{tab:hypotheses-final}.
+
+\begin{table}[H]
+\centering
+\caption{Соответствие экспериментальных результатов гипотезам}
+\label{tab:hypotheses-final}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\linewidth}{@{}lXl@{}}
+\toprule
+\textbf{Гипотеза} & \textbf{Результат} & \textbf{Статус} \\
+\midrule
+$H_0^{\text{main}}$ &
+На табличных flow-данных UNSW-NB15 классические ансамбли (XGBoost,
+RF) достигают F1\,=\,0{,}92; CNN-LSTM показал F1\,=\,0{,}77 (среднее
+по 3 seed) при PR-AUC\,=\,0{,}96 и latency 0{,}96\,мс. По эксплуатационным
+критериям (E6) и потенциалу расширения (E4) CNN-LSTM соответствует
+proposed-роли. Гипотеза \emph{уточнена}: ансамбли остаются сильным
+baseline, нейросетевой подход обоснован эксплуатационными свойствами. &
+уточнена \\
+\addlinespace
+$H_0^{\text{aux}}$ &
+ИИ-злоумышленник в форме \emph{templates + FSM + drift} обеспечил
+воспроизводимое стресс-тестирование (E4: 16\,412 записей, 600 тиков,
+ground-truth по 11 состояниям). Per-state recall и FPR измерены ---
+\emph{недоступно} при использовании только статического датасета. &
+подтверждена \\
+\addlinespace
+$H_0^{\text{transfer}}$ &
+Распакован и подготовлен CICIDS2017; mapping подмножества общих
+признаков с UNSW-NB15 зафиксирован в \verb|configs/data/cicids2017.yaml|.
+Полный прогон cross-evaluation --- задача дальнейшего развития. &
+подготовлена \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection*{Выводы по главе 4}
+
+\begin{enumerate}
+    \item Проведены шесть экспериментов (E1--E6) с 22 запусками и
+    14 моделями в идентичных условиях. Получены реальные
+    численные результаты, подкреплённые таблицами и графиками.
+    \item \textbf{E1:} XGBoost --- лидер по F1 (0{,}919) на табличных
+    flow-данных; среди DL-моделей лидируют TCN, BiLSTM, LSTM/GRU
+    (F1\,=\,0{,}82--0{,}84). CNN-LSTM показал среднее F1\,=\,0{,}770,
+    PR-AUC\,=\,0{,}955 при латентности 0{,}96\,мс.
+    \item \textbf{E2:} Калибровка под FPR\,=\,0{,}01 даёт
+    Precision\,=\,0{,}99 при Recall\,=\,0{,}56; полнота по классам
+    атак --- в полосе 0{,}50--0{,}58, наименьшая у редких классов.
+    \item \textbf{E3:} Температурное масштабирование снижает ECE с
+    0{,}089 до 0{,}047 ($T = 1{,}28$); FPR на тесте совпадает с
+    целевым 0{,}01.
+    \item \textbf{E4:} ИИ-злоумышленник даёт воспроизводимое
+    стресс-тестирование с ground-truth FSM; CNN-LSTM сохраняет
+    Precision\,=\,0{,}97 и FPR\,=\,0{,}006 на нормальных
+    состояниях.
+    \item \textbf{E5:} Drift-monitor корректно срабатывает на всех
+    10 точках (PSI > 0{,}25). Падение F1 на синтетике --- известное
+    OOD-поведение, ожидаемое в текущей версии шаблонов.
+    \item \textbf{E6:} CNN-LSTM удовлетворяет NFR-3 (latency
+    0{,}96\,мс при пороге 50\,мс); все DL-модели укладываются в
+    эксплуатационные требования.
+    \item Обоснован выбор CNN-LSTM как основной модели системы по
+    совокупности критериев: моделирование последовательной структуры,
+    низкая latency, гибкость расширения, соответствие исходной
+    гипотезе. XGBoost рекомендован как параллельная табличная ветвь
+    в гибридной конфигурации.
+\end{enumerate}

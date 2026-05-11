@@ -1,0 +1,386 @@
+\section{Сравнительный анализ нейросетевых архитектур и проектирование методики обнаружения}
+\label{ch:design}
+
+\noindent
+\textit{Содержание главы соответствует второму этапу постановки
+задачи (см.~ВКР, Этап~2): анализ и сравнение архитектур нейронных
+сетей; формирование теоретической модели и требований к данным;
+генерация и обоснование синтетических тестовых сценариев.}\\
+
+\subsection{Принципы сравнения и методологические замечания}
+
+Цель главы --- обоснование выбора нейросетевой архитектуры и
+формализация методики обработки данных и тестирования.
+Сравнение архитектур проводится в два этапа: \emph{(а)} теоретический
+анализ опубликованных в литературе NIDS-результатов с явной привязкой
+к первоисточникам (см. \tabref{tab:lit-results}); \emph{(б)}
+собственный эксперимент в равных условиях, описываемый на
+этапе~\ref{ch:experiments}.
+
+\textbf{Методологическое замечание.} Прямое количественное сравнение
+результатов из разных литературных источников некорректно из-за:
+(а)~различий датасетов (NSL-KDD, KDDCup99, UNSW-NB15, CICIDS2017);
+(б)~различий схем препроцессинга и разделения выборок;
+(в)~различной интерпретации метрик при дисбалансе
+классов~\cite{khraisat2019survey, sommer2010outside, pendlebury2019tesseract}.
+Поэтому литературные результаты используются как качественные
+индикаторы.
+
+\subsection{Опубликованные результаты применения архитектур в NIDS}
+
+В \tabref{tab:lit-results} сведены опубликованные в рецензируемых
+источниках NIDS-результаты с указанием датасета и постановки.
+
+{
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{3pt}
+\small
+\begin{longtable}{@{}p{3.0cm}p{2.4cm}p{2.6cm}p{1.8cm}p{4.7cm}@{}}
+\caption{Опубликованные результаты применения нейронных сетей в задачах
+NIDS}\label{tab:lit-results}\\
+\toprule
+\textbf{Источник} & \textbf{Архитектура} & \textbf{Датасет} &
+\textbf{Задача} & \textbf{Результат} \\
+\midrule
+\endfirsthead
+\multicolumn{5}{@{}l@{}}{\textit{Продолжение таблицы~\ref{tab:lit-results}}}\\
+\toprule
+\textbf{Источник} & \textbf{Архитектура} & \textbf{Датасет} &
+\textbf{Задача} & \textbf{Результат} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Kim и соавт.~\cite{kim2016lstm} & LSTM-RNN & KDD Cup 99 & binary &
+Accuracy~$\approx 96{,}93\%$; DR~$\approx 98{,}88\%$;
+FAR~$\approx 10{,}04\%$ \\
+\addlinespace
+Yin и соавт.~\cite{yin2017dlrnn} & RNN & NSL-KDD (KDDTest+) & binary &
+Accuracy~$\approx 83{,}28\%$ при 80 hidden units \\
+\addlinespace
+Yin и соавт.~\cite{yin2017dlrnn} & RNN & NSL-KDD (KDDTest+) & multiclass &
+Accuracy~$\approx 81{,}29\%$ \\
+\addlinespace
+Moustafa и Slay~\cite{moustafa2016eval} & ANN & UNSW-NB15 & binary &
+Accuracy~$\approx 81{,}3\%$; FAR~$\approx 18{,}4\%$ \\
+\addlinespace
+Vinayakumar и соавт.~\cite{vinayakumar2019dl} &
+DNN, CNN, LSTM, CNN-LSTM &
+NSL-KDD, KDDCup99, UNSW-NB15, CICIDS2017 &
+binary, multiclass &
+CNN-LSTM показал наибольшие F1/Accuracy среди DL-семейства данной
+работы на UNSW-NB15 и CICIDS2017 \\
+\addlinespace
+Mirsky и соавт.~\cite{mirsky2018kitsune} &
+Kitsune (ансамбль AE) &
+собственный стенд (Mirai, SSDP Flood и др.) &
+semi-supervised, online &
+AUC: Mirai~$\approx 0{,}9988$; SSDP~$\approx 0{,}9844$;
+ARP MitM~$\approx 0{,}9606$ \\
+\addlinespace
+Sharafaldin и соавт.~\cite{sharafaldin2018toward} & MLP, RF, KNN &
+CICIDS2017 & multiclass &
+MLP: Precision~$\approx 0{,}77$, Recall~$\approx 0{,}83$;
+RF/KNN превосходят MLP в той же работе \\
+\addlinespace
+Ahmad и соавт.~\cite{ahmad2021nids} (обзор) &
+LSTM, BiLSTM, CNN-LSTM & NSL-KDD, UNSW-NB15, CICIDS2017 &
+binary, multiclass &
+BiLSTM и CNN-LSTM устойчиво превосходят LSTM по Accuracy/F1 \\
+\end{longtable}
+}
+
+Выявленные тенденции в литературе:
+
+\begin{enumerate}
+    \item Гибридные модели (CNN-LSTM, BiLSTM) устойчиво превосходят
+    как чисто свёрточные, так и чисто рекуррентные модели по F1 в
+    \emph{внутренних} сравнениях соответствующих работ.
+    \item Высокие показатели на KDD-семействе (\(>95\,\%\) Accuracy)
+    не должны интерпретироваться как доказательство практической
+    пригодности из-за известных дефектов
+    датасета~\cite{tavallaee2009nslkdd, sommer2010outside}.
+    \item На современных датасетах (UNSW-NB15, CICIDS2017) разрыв
+    между классическими ML- и DL-моделями существенно
+    меньше~\cite{ferrag2020dlcyber, ahmad2021nids}.
+\end{enumerate}
+
+\subsection{Обоснование выбора CNN-LSTM как основной архитектуры}
+\label{subsec:cnn-lstm-rationale}
+
+С учётом теоретического анализа в качестве основной
+(\emph{proposed}) архитектуры выбирается \textbf{CNN-LSTM}. Решение
+обосновано следующими аргументами.
+
+\begin{enumerate}
+    \item \textbf{Соответствие природе данных.} Атаки в
+    flow-представлении проявляются одновременно как локальные
+    паттерны (например, специфическое сочетание признаков
+    SYN-флуда в одном flow) и как временные тренды
+    (последовательность подобных flow). CNN-LSTM моделирует обе
+    компоненты в одной архитектуре.
+    \item \textbf{Опубликованные результаты.} В нескольких
+    независимых рецензируемых работах~\cite{vinayakumar2019dl,
+    ferrag2020dlcyber, liu2019survey, ahmad2021nids} CNN-LSTM
+    демонстрирует наибольшие F1/Accuracy в внутренних сравнениях
+    на UNSW-NB15 и CICIDS2017.
+    \item \textbf{Воспроизводимость.} Архитектура хорошо
+    документирована, реализуется стандартными примитивами PyTorch,
+    не требует специализированных техник обучения.
+    \item \textbf{Эксплуатационная стоимость.} Inference latency
+    укладывается в диапазон, приемлемый для NTA-pipeline.
+    \item \textbf{Альтернативы и контрольные модели.} В качестве
+    альтернатив в собственном эксперименте сохраняются BiLSTM
+    (двунаправленный контекст) и Transformer-encoder (attention);
+    в качестве контрольных semi-supervised baselines --- AE и VAE;
+    в качестве классических baseline --- Logistic Regression,
+    Random Forest, XGBoost, Isolation Forest, One-Class SVM.
+\end{enumerate}
+
+\subsection{Теоретическая модель данных и pipeline обработки}
+
+\subsubsection{Схема признаков UNSW-NB15}
+
+UNSW-NB15 (\emph{cleaned} распределение) содержит 44 содержательных
+признака, разделяемых на пять групп
+(\tabref{tab:unsw-feature-groups}).
+
+\begin{table}[H]
+\centering
+\caption{Группы признаков UNSW-NB15 и их назначение}
+\label{tab:unsw-feature-groups}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{@{}lXX@{}}
+\toprule
+\textbf{Группа} & \textbf{Состав} & \textbf{Роль в детекции} \\
+\midrule
+Базовые потоковые &
+\emph{dur, proto, service, state, sbytes, dbytes, sttl, dttl,
+sloss, dloss, rate}
+&
+длительность, протокол, состояние сессии, байты и пакеты в обе
+стороны, общая скорость потока \\
+\addlinespace
+Контентные &
+\emph{sload, dload, swin, dwin, smean, dmean, stcpb, dtcpb,
+trans\_depth, response\_body\_len, spkts, dpkts} &
+скорости, окна TCP, базовые транзакционные характеристики \\
+\addlinespace
+Временные &
+\emph{sjit, djit, sinpkt, dinpkt, tcprtt, synack, ackdat} &
+межпакетные интервалы, джиттеры, RTT, timing-сигнатуры \\
+\addlinespace
+Дополнительные &
+\emph{ct\_state\_ttl, ct\_flw\_http\_mthd, is\_ftp\_login,
+ct\_ftp\_cmd, is\_sm\_ips\_ports} &
+агрегаты по протокольному поведению, бинарные флаги \\
+\addlinespace
+Контекстные \emph{ct\_*}&
+\emph{ct\_srv\_src, ct\_srv\_dst, ct\_dst\_ltm, ct\_src\_ltm,
+ct\_src\_dport\_ltm, ct\_dst\_sport\_ltm, ct\_dst\_src\_ltm} &
+агрегаты по последним 100 соединениям; отражают режим
+сканирования и фан-аут \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsubsection{Pipeline обработки}
+
+Полный pipeline принимает на вход поток flow-записей:
+\[
+\boxed{
+\begin{array}{l}
+\text{IPFIX/CSV}\ \to\ \text{Schema}\ \to\ \text{Cleanup}\ \to\ \text{Encoding}\\[2pt]
+\to\ \text{Scaling}\ \to\ \text{Windowing}\ \to\ \text{Model}\\[2pt]
+\to\ \text{Threshold}\ \to\ \text{Alert}
+\end{array}
+}
+\]
+
+\textbf{Очистка.} Применяются: замена нечисловых пропусков константой,
+числовых --- нулём; унификация регистра и пробелов в
+\emph{service, state, proto}; удаление дубликатов; обрезка крайних
+\(0{,}1\%\) хвостов распределений. Вся статистика собирается
+\emph{только} на обучающей выборке.
+
+\textbf{Кодирование категориальных признаков.} One-hot для признаков
+с малой кардинальностью (\emph{proto, state}); frequency-encoding
+для \emph{service} (\(\sim 13\) уровней):
+\begin{equation}
+e_{\text{freq}}(c) = \frac{|\{i : x_i^{(c)} = c\}|}{n_{\text{train}}}.
+\label{eq:freq-enc}
+\end{equation}
+
+\textbf{Преобразование числовых признаков.} Лог-преобразование
+тяжелохвостых признаков \(\tilde{x} = \log(1 + x)\) с последующим
+robust-scaling:
+\begin{equation}
+\tilde{x}' = \frac{\tilde{x} - \operatorname{med}(\tilde{x})}
+                  {\operatorname{IQR}(\tilde{x})}.
+\label{eq:robust-scaler}
+\end{equation}
+Робастные оценки устойчивы к выбросам --- критично для NIDS,
+где аномалии формируют ``хвосты'' распределения.
+
+\textbf{Скользящие окна.} Принят размер \(W = 32\) с шагом
+\(S = 8\) (75\% перекрытие). Метка окна формируется
+по последнему flow (\emph{last}-агрегация) с учётом эмпирически
+обоснованной структуры UNSW-NB15.
+
+\subsubsection{Унификация признаков с CICIDS2017 для cross-evaluation}
+
+Для проверки переносимости методики (гипотеза $H_0^{\text{transfer}}$)
+вспомогательный датасет CICIDS2017~\cite{sharafaldin2018toward}
+формируется утилитой CICFlowMeter и содержит более 80 flow-признаков.
+Часть из них функционально эквивалентна полям UNSW-NB15.
+Подмножество общих признаков, принятое в работе, представлено в
+\tabref{tab:common-features}.
+
+\begin{table}[H]
+\centering
+\caption{Подмножество признаков, общих для UNSW-NB15 и CICIDS2017,
+принятое для cross-evaluation}
+\label{tab:common-features}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{@{}lXX@{}}
+\toprule
+\textbf{Семантика} & \textbf{UNSW-NB15} & \textbf{CICIDS2017 (CICFlowMeter)} \\
+\midrule
+Длительность потока        & \emph{dur}      & Flow Duration \\
+Протокол транспорта        & \emph{proto}    & Protocol \\
+Прикладной сервис          & \emph{service}  & Destination Port (как proxy) \\
+Байты от источника         & \emph{sbytes}   & Total Length of Fwd Packets \\
+Байты к источнику          & \emph{dbytes}   & Total Length of Bwd Packets \\
+Пакеты от источника        & \emph{spkts}    & Total Fwd Packets \\
+Пакеты к источнику         & \emph{dpkts}    & Total Backward Packets \\
+Скорость источника         & \emph{sload}    & Fwd Packets/s \\
+Скорость получателя        & \emph{dload}    & Bwd Packets/s \\
+Межпакетный интервал, src  & \emph{sinpkt}   & Fwd IAT Mean \\
+Межпакетный интервал, dst  & \emph{dinpkt}   & Bwd IAT Mean \\
+Джиттер, src               & \emph{sjit}     & Fwd IAT Std \\
+Джиттер, dst               & \emph{djit}     & Bwd IAT Std \\
+TCP-timing-сигнатуры       & \emph{synack, ackdat} & Flow IAT-агрегаты \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Признаки, не имеющие прямого аналога (\emph{ct\_*}-агрегаты UNSW-NB15,
+специфические признаки CICFlowMeter), исключаются из набора
+cross-evaluation. В режиме \emph{train on UNSW, test on CICIDS2017}
+вход модели сужается до 14 общих признаков; в режиме обучения только на
+UNSW-NB15 используется полный набор из 60 признаков, формируемый
+\texttt{Preprocessor}-ом.
+
+\subsubsection{Управление дисбалансом классов}
+
+Применяется \textbf{focal loss}~\cite{lin2017focal}:
+\begin{equation}
+\mathcal{L}_{\text{focal}} =
+-\frac{1}{n}\sum_{i=1}^{n}
+  \alpha_{y_i}\,(1-p_{y_i})^{\gamma}\,\log p_{y_i},
+\label{eq:focal}
+\end{equation}
+с параметрами \(\alpha = 0{,}25\), \(\gamma = 2{,}0\). Для классических
+baselines дополнительно применяется class re-weighting
+\(w_c = n / (|\mathcal{C}|\,n_c)\).
+
+\subsection{Архитектура ИИ-злоумышленника}
+
+Реализуется гибридная архитектура \emph{templates + FSM + drift}:
+
+\begin{enumerate}
+    \item \textbf{Библиотека шаблонов} (семь параметризованных
+    шаблонов: \texttt{ddos\_synflood, port\_scan, brute\_force,
+    exploit\_payload, data\_exfil, internal\_recon, worm\_lateral})
+    плюс шаблон \texttt{normal} для генерации фонового трафика.
+    \item \textbf{Конечный автомат} с состояниями
+    \[
+    \mathcal{S} = \{\text{NORMAL}\} \cup
+    \{\text{ATTACK}(c)\}_{c \in \mathcal{C}} \cup
+    \{\text{DRIFT}(k)\}_{k \in \mathcal{K}}.
+    \]
+    Политика \(\pi\colon \mathcal{S} \to \Delta(\mathcal{S})\)
+    задаётся вероятностями переходов и минимальными длительностями
+    состояний.
+    \item \textbf{Drift-инжектор} с тремя типами дрейфа:
+    \emph{covariate, prior, concept}. Контроль интенсивности ---
+    через индексы PSI и MMD относительно эталонного окна нормы.
+\end{enumerate}
+
+\subsection{Протокол экспериментов}
+
+Сформирован протокол шести экспериментов, представленный в
+\tabref{tab:experiments}.
+
+\begin{table}[H]
+\centering
+\caption{Протокол экспериментов}
+\label{tab:experiments}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\linewidth}{@{}lXXX@{}}
+\toprule
+\textbf{ID} & \textbf{Цель} & \textbf{Метрики} & \textbf{Критерий принятия} \\
+\midrule
+E1 &
+Сравнение моделей-кандидатов на UNSW-NB15; одинаковый препроцессинг
+и пороги &
+Precision, Recall, F1, MCC, PR-AUC, ROC-AUC; $\sigma_{F1}$ &
+Статистически значимое превосходство (\(p < 0{,}05\), Wilcoxon)
+над ансамблем baselines \\
+\addlinespace
+E2 &
+Анализ ошибок (FP/FN) лучшей модели; разрезы по \emph{attack\_cat} &
+confusion matrix, FN/FP по классам, ROC по классам &
+Идентификация классов с пониженной полнотой \\
+\addlinespace
+E3 &
+Калибровка порога; температурное масштабирование &
+ECE, FP-rate vs Recall, FP-per-time, TTD &
+Рабочая точка по NFR-2 \\
+\addlinespace
+E4 &
+Тестирование с ИИ-злоумышленником на стенде &
+Precision, Recall, F1, TTD, FP-per-time; per-state recall &
+$\Delta F_1 \leq 0{,}10$ при agent-NORMAL+ATTACK; TTD$\leq W$ \\
+\addlinespace
+E5 &
+Drift-устойчивость; PSI/MMD-инжектирование &
+PSI, MMD, $\Delta F_1$ vs PSI; время восстановления &
+$\Delta F_1 \leq 0{,}10$ при PSI $\leq 0{,}25$;
+срабатывание drift-monitor \\
+\addlinespace
+E6 &
+Эксплуатационная производительность &
+inference latency, throughput, CPU/RAM &
+NFR-3, NFR-4 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Для каждого эксперимента применяются: множественные seed (\(n \geq 5\)
+для лидирующих моделей), bootstrap CI~95\,\%, парный критерий
+Уилкоксона при сравнении пар моделей, фиксированные YAML-конфиги.
+
+\subsection*{Выводы по главе 2}
+
+\begin{enumerate}
+    \item Систематизированы опубликованные NIDS-результаты восьми
+    типов архитектур с явной привязкой к первоисточникам.
+    Установлены три методологических ограничения литературного
+    сравнения, определяющие необходимость собственного эксперимента в
+    равных условиях.
+    \item Обоснован выбор CNN-LSTM как proposed-архитектуры по
+    четырём аргументам: соответствие природе данных, опубликованные
+    результаты, воспроизводимость, эксплуатационная стоимость.
+    Альтернативы и контрольные модели зафиксированы.
+    \item Описана теоретическая модель данных и pipeline обработки
+    UNSW-NB15: схема признаков, очистка, encoding, log-преобразование,
+    robust-scaling, скользящие окна (\(W=32\), \(S=8\), last-агрегация),
+    focal loss для управления дисбалансом классов.
+    \item Сформирована архитектура ИИ-злоумышленника:
+    7 шаблонов + FSM + drift-инжектор; описаны три типа дрейфа.
+    \item Сформирован протокол шести экспериментов E1--E6 с
+    количественными критериями принятия и статистической методологией.
+\end{enumerate}

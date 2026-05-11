@@ -1,0 +1,476 @@
+\section{Программная реализация прототипа системы обнаружения и ИИ-злоумышленника}
+\label{ch:impl}
+
+\noindent
+\textit{Содержание главы соответствует третьему этапу постановки
+задачи (см.~ВКР, Этап~3): разработка программного прототипа системы
+обнаружения аномалий (проектирование архитектуры, реализация модулей
+предобработки и формирования окон, ядра детекции, минимального
+интерфейса), обучение и оптимизация моделей с подготовкой реальных и
+синтетических данных, разработка ИИ-злоумышленника и библиотеки
+атакующих сценариев.}\\
+
+\subsection{Стек и общая структура программного проекта}
+
+Прототип реализован на платформе Windows 11 в среде VS Code в виде
+Python-пакета \texttt{diploma\_nids}. Технологический стек:
+
+\begin{itemize}
+    \item Python 3.10+ (тестировался на 3.13.11);
+    \item PyTorch 2.x (CPU-сборка) --- глубокое обучение;
+    \item scikit-learn 1.x --- классические baseline-модели;
+    \item XGBoost --- gradient boosting baseline;
+    \item Pydantic v2 --- валидация конфигов и схем данных;
+    \item PyYAML --- параметризация всех стадий pipeline;
+    \item FastAPI + uvicorn --- REST API инференса;
+    \item Streamlit --- визуальная панель мониторинга;
+    \item pytest --- юнит-тестирование (9 модулей);
+    \item Make --- оркестрация сборки и воспроизводимости.
+\end{itemize}
+
+Общая структура проекта приведена в \tabref{tab:project-layout}.
+Общий объём исходного кода --- около \textbf{4230 строк Python}.
+В колонке ``Каталог'' префикс \texttt{src/diploma\_nids/} для подпакетов
+\texttt{data/}, \texttt{models/}, \texttt{training/} и т.\,д. опущен ради
+компактности (физический путь --- \texttt{src/diploma\_nids/<каталог>}).
+
+{
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{longtable}{@{}p{2.6cm}p{4.6cm}p{7.5cm}@{}}
+\caption{Структура программного проекта \texttt{diploma\_nids}}
+\label{tab:project-layout}\\
+\toprule
+\textbf{Каталог} & \textbf{Назначение} & \textbf{Ключевые модули} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{@{}l@{}}{\textit{Продолжение таблицы~\ref{tab:project-layout}}}\\
+\toprule
+\textbf{Каталог} & \textbf{Назначение} & \textbf{Ключевые модули} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{configs/}      & Параметризация всех стадий (26 YAML-файлов) &
+\texttt{data}, \texttt{preprocess}, \texttt{models}, \texttt{train},
+\texttt{eval}, \texttt{attacker}, \texttt{pipeline} \\
+\addlinespace
+\texttt{data/} & Схемы, загрузка, препроцессинг, окна, splits &
+\texttt{schema.py}, \texttt{load.py}, \texttt{preprocess.py},
+\texttt{windowing.py}, \texttt{splits.py} \\
+\addlinespace
+\texttt{models/} & Модели-кандидаты &
+\texttt{base.py} (registry), \texttt{cnn\_lstm.py}, \texttt{rnn\_family.py},
+\texttt{cnn1d.py}, \texttt{tcn.py}, \texttt{transformer.py},
+\texttt{autoencoder.py}, \texttt{classical.py} \\
+\addlinespace
+\texttt{training/} & Обучение DL-моделей &
+\texttt{trainer.py}, \texttt{losses.py} (BCE, focal) \\
+\addlinespace
+\texttt{eval/} & Метрики, калибровка, drift &
+\texttt{metrics.py}, \texttt{thresholding.py}, \texttt{drift.py},
+\texttt{error\_analysis.py} \\
+\addlinespace
+\texttt{attacker/} & ИИ-злоумышленник &
+\texttt{templates/} (7 шаблонов + normal), \texttt{agent.py} (FSM),
+\texttt{drift\_injector.py}, \texttt{runtime.py} \\
+\addlinespace
+\texttt{inference/} & Online-инференс и алертинг &
+\texttt{stream.py}, \texttt{alerting.py}, \texttt{service.py} (FastAPI) \\
+\addlinespace
+\texttt{ui/} & Streamlit-дэшборд &
+\texttt{streamlit\_app.py} \\
+\addlinespace
+\texttt{utils/} & Воспроизводимость и IO &
+\texttt{seed.py}, \texttt{io.py}, \texttt{logging.py} \\
+\addlinespace
+\texttt{scripts/} & Точки входа CLI & 12 нумерованных скриптов:
+загрузка~UNSW, препроцессинг, обучение, оценка, прогон агента,
+drift-тест, demo-стенд, генерация графиков и таблиц \\
+\addlinespace
+\texttt{tests/} & Юнит-тесты (9 модулей) &
+\texttt{test\_utils}, \texttt{test\_configs},
+\texttt{test\_preprocess}, \texttt{test\_windowing},
+\texttt{test\_splits}, \texttt{test\_models\_smoke},
+\texttt{test\_metrics}, \texttt{test\_attacker},
+\texttt{test\_alerting} \\
+\end{longtable}
+}
+
+\subsection{Подсистема обработки данных}
+
+\subsubsection{Схема и загрузка}
+
+Схема UNSW-NB15 формализована Pydantic-моделями (модуль
+\texttt{data/schema.py}). Загрузчик \texttt{data/load.py} валидирует
+наличие признаков и меток, проверяет существование официального
+train/test-разделения и возвращает \texttt{DataFrame}. Аналогично
+реализована загрузка CICIDS2017 для cross-evaluation.
+
+\subsubsection{Препроцессор}
+
+Класс \texttt{Preprocessor} реализует sklearn-совместимый интерфейс
+\texttt{fit / transform / fit\_transform}. На стадии \texttt{fit}
+(на обучающей выборке) формируются:
+
+\begin{itemize}
+    \item квантильные границы для обрезки выбросов
+    (\(0{,}001\) и \(0{,}999\));
+    \item статистики robust-scaler (медиана, IQR);
+    \item one-hot категории для признаков с малой кардинальностью и
+    frequency-encoding для большой кардинальности;
+    \item фиксированный порядок выходных столбцов
+    \texttt{output\_columns}, обеспечивающий идентичность
+    представления в train/val/test/inference.
+\end{itemize}
+
+Препроцессор сериализуется в JSON (\texttt{save}) и восстанавливается
+(\texttt{load}) для online-инференса.
+
+\subsubsection{Скользящие окна}
+
+Модуль \texttt{data/windowing.py} реализует \texttt{build\_windows},
+который по векторизованному массиву признаков и меткам возвращает
+тензор \((m, W, d)\) и метки окон. Параметры:
+\(W = 32\), \(S = 8\); стратегия \emph{last}-агрегации меток
+обоснована на этапе~\ref{ch:design} структурой UNSW-NB15.
+
+\subsection{Реализованные модели}
+
+В \tabref{tab:models-impl} сведены 15 реализованных моделей.
+Регистрация выполняется при импорте подпакета \texttt{models}
+через декоратор \texttt{@register("name")}.
+
+\begin{table}[H]
+\centering
+\caption{Реализованные модели в \texttt{diploma\_nids/models/}}
+\label{tab:models-impl}
+\renewcommand{\arraystretch}{1.2}
+\small
+\begin{tabularx}{\linewidth}{@{}lllX@{}}
+\toprule
+\textbf{Имя} & \textbf{Тип} & \textbf{Окна} & \textbf{Файл} \\
+\midrule
+mlp                  & DL supervised        & нет & \texttt{models/mlp.py} \\
+cnn1d                & DL supervised        & да  & \texttt{models/cnn1d.py} \\
+\textbf{cnn\_lstm}   & DL supervised \emph{(proposed)} & да & \texttt{models/cnn\_lstm.py} \\
+lstm                 & DL supervised        & да  & \texttt{models/rnn\_family.py} \\
+gru                  & DL supervised        & да  & \texttt{models/rnn\_family.py} \\
+bilstm               & DL supervised + attn & да  & \texttt{models/rnn\_family.py} \\
+tcn                  & DL supervised        & да  & \texttt{models/tcn.py} \\
+transformer          & DL supervised        & да  & \texttt{models/transformer.py} \\
+autoencoder          & DL semi-supervised   & нет & \texttt{models/autoencoder.py} \\
+vae                  & DL semi-supervised   & нет & \texttt{models/autoencoder.py} \\
+logistic\_regression & classical            & нет & \texttt{models/classical.py} \\
+random\_forest       & classical            & нет & \texttt{models/classical.py} \\
+xgboost              & classical            & нет & \texttt{models/classical.py} \\
+isolation\_forest    & classical (unsup.)   & нет & \texttt{models/classical.py} \\
+ocsvm                & classical (one-class)& нет & \texttt{models/classical.py} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Все DL-модели реализованы на PyTorch и единообразно возвращают объект
+\texttt{ModelOutput} с полями \texttt{logits}, \texttt{probs} и
+\texttt{extras}. Архитектура CNN-LSTM:
+
+\begin{equation*}
+\begin{aligned}
+\text{Input}(B, W, F)\ &\to\ \underbrace{[\text{Conv1D}\!\to\!\text{BN}\!\to\!\text{ReLU}\!\to\!\text{MaxPool}\!\to\!\text{Dropout}]\!\times\!2}_{\text{два свёрточных блока}}\\
+&\to\ \text{LSTM}\ \to\ \text{MLP-head}\ \to\ \text{Sigmoid}.
+\end{aligned}
+\end{equation*}
+
+\subsection{Подсистема обучения и оценки}
+
+\textbf{Loss-функции.} В \texttt{training/losses.py} реализованы
+binary cross-entropy с логитами и фокальная функция
+потерь~\cite{lin2017focal} с параметрами \(\alpha\), \(\gamma\),
+задаваемыми в \texttt{configs/train/default.yaml}.
+
+\textbf{Тренер.} \texttt{training/trainer.py} реализует AdamW + cosine
+LR-scheduler, gradient clipping, early stopping по
+\texttt{val\_pr\_auc}, сохранение лучшего чекпойнта и журнала
+истории обучения (loss, val\_pr\_auc, val\_f1). Полный набор
+гиперпараметров обучения, использованный в \emph{full}-режиме при
+проведении эксперимента~E1, приведён в \tabref{tab:train-hyperparams}.
+
+\begin{table}[H]
+\centering
+\caption{Гиперпараметры обучения DL-моделей (конфигурация
+\texttt{configs/train/full.yaml})}
+\label{tab:train-hyperparams}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{@{}lXX@{}}
+\toprule
+\textbf{Параметр} & \textbf{Значение} & \textbf{Назначение} \\
+\midrule
+Оптимизатор          & AdamW            & адаптивный градиентный метод с decoupled weight decay \\
+Learning rate        & $1{,}0 \cdot 10^{-3}$    & базовая скорость обучения \\
+Weight decay         & $1{,}0 \cdot 10^{-4}$    & регуляризация $\ell_2$ \\
+$\beta_1, \beta_2$   & $0{,}9$, $0{,}999$ & параметры Adam \\
+Batch size           & 256              & размер минибатча \\
+Эпохи (макс.)        & 30               & лимит обучения \\
+Patience             & 7                & окно early stopping \\
+Метрика мониторинга  & \texttt{val\_pr\_auc} & целевая метрика остановки (\eng{max}-режим) \\
+LR-scheduler         & cosine annealing & снижение lr к $1{,}0 \cdot 10^{-6}$ \\
+Gradient clipping    & $\|g\|_2 \leq 1{,}0$ & защита от взрыва градиентов \\
+Loss-функция         & focal loss       & противодействие дисбалансу классов \\
+$\alpha$ (focal)     & $0{,}25$         & вес положительного класса \\
+$\gamma$ (focal)     & $2{,}0$          & фокусировка на «трудных» примерах \\
+Class weights        & auto             & автоматический пересчёт по обучающей выборке \\
+Seed                 & 42 (123, 2024)   & фиксация воспроизводимости (3 запуска для proposed) \\
+Определённость       & deterministic    & PyTorch deterministic mode \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{Метрики.} \texttt{eval/metrics.py} реализует Precision,
+Recall, F1, FPR, MCC, ROC-AUC, PR-AUC, ECE, FP-per-time, TTD, поиск
+порога по целевому FPR и по F1-max, bootstrap-CI.
+
+\textbf{Калибровка.} \texttt{eval/thresholding.py} реализует
+температурное масштабирование~\eqref{eq:temp-scaling} через L-BFGS на
+валидационных логитах.
+
+\textbf{Drift-метрики.} \texttt{eval/drift.py} реализует PSI, KL и MMD
+с автобандвидтом по медианной эвристике; функция
+\texttt{drift\_report} возвращает агрегат с явным индикатором
+\texttt{drift\_alarm} при превышении PSI-порога \(0{,}25\).
+
+\subsection{ИИ-злоумышленник}
+
+\subsubsection{Шаблоны атак}
+
+Реализованы семь параметризованных шаблонов
+(\tabref{tab:attack-templates}), каждый формирует
+последовательность объектов \texttt{FlowRecord} с явной привязкой к
+классу \emph{attack\_cat} UNSW-NB15. Дополнительно реализован шаблон
+\texttt{normal} для генерации фонового трафика.
+
+\begin{table}[H]
+\centering
+\caption{Реализованная библиотека шаблонов атак}
+\label{tab:attack-templates}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\linewidth}{@{}lXX@{}}
+\toprule
+\textbf{Шаблон} & \textbf{Параметризация} & \textbf{Соответствие классу UNSW} \\
+\midrule
+\texttt{ddos\_synflood} &
+интенсивность \(\lambda_0\), длительность \(\Delta\), доля SYN-флагов,
+распределение исходных IP &
+DoS \\
+\addlinespace
+\texttt{port\_scan} &
+скорость подключений \(\rho\), диапазон портов, режим, длительность &
+Reconnaissance \\
+\addlinespace
+\texttt{brute\_force} &
+интервал между попытками, целевой порт, доля успешных авторизаций &
+Reconnaissance / Exploits \\
+\addlinespace
+\texttt{exploit\_payload} &
+размер payload, нестандартные сочетания TCP-флагов, доля retransmissions &
+Exploits \\
+\addlinespace
+\texttt{data\_exfil} &
+длительность сессии, асимметрия \(b_{out}/b_{in}\), стабильность скорости &
+Backdoors \\
+\addlinespace
+\texttt{internal\_recon} &
+фан-аут потоков, периодичность, размер сессии &
+Reconnaissance \\
+\addlinespace
+\texttt{worm\_lateral} &
+число направленных потоков, периодичность, размер сессии &
+Worms \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsubsection{Конечно-автоматный планировщик}
+
+\texttt{attacker/agent.py} реализует \texttt{FSMAgent} с поддержкой
+11 состояний (\emph{NORMAL}, 7 \emph{ATTACK} и 3 \emph{DRIFT}),
+вероятностями переходов из \texttt{configs/attacker/policy.yaml} и
+минимальными длительностями состояний. Полный перечень состояний
+с привязкой к шаблонам атак и классам \emph{attack\_cat} UNSW-NB15
+приведён в \tabref{tab:fsm-states}. Каждый тик автомата возвращает
+структуру \texttt{AgentTick} с метаданными ground truth
+(\(\langle\)состояние FSM, тип атаки, тип дрейфа\(\rangle\)),
+необходимыми для расчёта метрик в Эксперименте~E4.
+
+\begin{table}[H]
+\centering
+\caption{Состояния конечно-автоматного планировщика
+ИИ-злоумышленника}
+\label{tab:fsm-states}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\linewidth}{@{}lllX@{}}
+\toprule
+\textbf{Состояние} & \textbf{Тип} & \textbf{Шаблон} &
+\textbf{Класс UNSW-NB15} \\
+\midrule
+\texttt{NORMAL}         & нормальный  & \texttt{normal}         & Normal \\
+\addlinespace
+\texttt{ATTACK\_DDOS}   & атака       & \texttt{ddos\_synflood} & DoS \\
+\texttt{ATTACK\_SCAN}   & атака       & \texttt{port\_scan}     & Reconnaissance \\
+\texttt{ATTACK\_BRUTE}  & атака       & \texttt{brute\_force}   & Reconnaissance \\
+\texttt{ATTACK\_EXPLOIT}& атака       & \texttt{exploit\_payload} & Exploits \\
+\texttt{ATTACK\_EXFIL}  & атака       & \texttt{data\_exfil}    & Backdoors \\
+\texttt{ATTACK\_INTREC} & атака       & \texttt{internal\_recon}& Reconnaissance \\
+\texttt{ATTACK\_WORM}   & атака       & \texttt{worm\_lateral}  & Worms \\
+\addlinespace
+\texttt{DRIFT\_COV}     & дрейф       & ---                     & сдвиг масштаба/шума числовых признаков \\
+\texttt{DRIFT\_PRIOR}   & дрейф       & ---                     & изменение долей классов в потоке \\
+\texttt{DRIFT\_CONCEPT} & дрейф       & ---                     & маскирование сигнатурных признаков атак \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsubsection{Drift-инжектор и runtime}
+
+\texttt{attacker/drift\_injector.py} реализует три типа дрейфа:
+\emph{covariate} (сдвиг масштаба и шума), \emph{prior} (изменение
+долей классов через политику FSM), \emph{concept} (маскирование
+сигнатурных признаков атаки).
+
+\texttt{attacker/runtime.py} объединяет агент и drift-инжектор и
+предоставляет два режима работы: offline (метод
+\texttt{collect\_dataframe}) для эксперимента E4 и online
+(\texttt{stream\_with\_callback}) для realtime-демо.
+
+\subsection{Подсистема online-инференса и интерфейс}
+
+\subsubsection{FastAPI-сервис}
+
+Модуль \texttt{inference/service.py} реализует REST API:
+
+\begin{itemize}
+    \item \texttt{GET /health} --- проверка живости;
+    \item \texttt{GET /info} --- сведения о загруженной модели;
+    \item \texttt{POST /score} --- скоринг батча flow-записей;
+    \item \texttt{POST /score-window} --- прямой скоринг готового
+    окна \((W, F)\);
+    \item \texttt{GET /alerts/recent} --- последние \(n\) алертов.
+\end{itemize}
+
+Загрузка артефактов происходит через переменные окружения
+\texttt{DIPLOMA\_MODEL\_YAML}, \texttt{DIPLOMA\_CHECKPOINT},
+\texttt{DIPLOMA\_PREPROCESSOR}, \texttt{DIPLOMA\_THRESHOLD},
+что обеспечивает декларативность конфигурации.
+
+\subsubsection{Формирование алертов}
+
+\texttt{AlertFormer} реализует пятиступенчатую шкалу severity
+(\emph{info, low, medium, high, critical}), привязанную к
+нормированному превышению скоринга над порогом, и временное окно
+дедупликации (\(\Delta t = 5\,\text{с}\)) для подавления шумовых
+повторов.
+
+\subsubsection{Streamlit-дэшборд}
+
+\texttt{ui/streamlit\_app.py} реализует обновляемую с интервалом
+1--2~с панель: метрики (число алертов, доля \emph{critical/high},
+средний скоринг), таблицу алертов и временной ряд скорингов.
+Сообщается с FastAPI-сервисом через \texttt{DIPLOMA\_API\_URL}.
+
+\subsection{Воспроизводимость и журналирование}
+
+\begin{itemize}
+    \item Seed фиксируется через \texttt{utils/seed.py}
+    (\texttt{numpy}, \texttt{random}, \texttt{torch}, \texttt{torch.cuda},
+    \texttt{PYTHONHASHSEED}, \texttt{torch.use\_deterministic\_algorithms}).
+    \item Артефакты обучения сохраняются в JSON-формате в
+    \texttt{experiments/runs/}; чекпойнты --- в \texttt{models/}.
+    \item Конфигурации экспериментов фиксируются YAML-файлами;
+    \texttt{make reproduce} запускает полный цикл
+    \emph{data $\to$ preprocess $\to$ train $\to$ evaluate}
+    одной командой.
+    \item Препроцессор сохраняется JSON-ом и применяется идентично в
+    обучении и инференсе, исключая test-time leakage.
+\end{itemize}
+
+\subsection{Покрытие тестами}
+
+Реализованы 9 модулей юнит-тестов (pytest), фиксирующих критические
+инварианты программного прототипа. Состав модулей и проверяемые
+свойства приведены в \tabref{tab:tests}.
+
+\begin{table}[H]
+\centering
+\caption{Состав юнит-тестов программного прототипа}
+\label{tab:tests}
+\renewcommand{\arraystretch}{1.2}
+\small
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+\toprule
+\textbf{Файл теста} & \textbf{Проверяемые свойства} \\
+\midrule
+\texttt{test\_utils.py}        & seed-воспроизводимость; YAML/JSON roundtrip; создание родительских директорий \\
+\texttt{test\_configs.py}      & все 26 YAML-конфигов загружаются; FSM содержит 11 состояний; вероятности переходов суммируются в~1{,}0 \\
+\texttt{test\_preprocess.py}   & shape выходов; отсутствие NaN/Inf; неизменность статистик при повторном fit; save/load roundtrip; обработка неизвестной категории; обрезка выбросов \\
+\texttt{test\_windowing.py}    & корректные shapes; три стратегии агрегации меток; защита от коротких последовательностей; валидация входов \\
+\texttt{test\_splits.py}       & сохранение временного порядка; воспроизводимость random; непересечение split-ов \\
+\texttt{test\_models\_smoke.py}& 10 DL и 5 классических моделей загружаются из YAML и выполняют forward; save/load CNN-LSTM; \emph{proposed = true} \\
+\texttt{test\_metrics.py}      & Precision, Recall, F1, MCC; threshold для целевого FPR; ECE снижается калибровкой; PSI/KL/MMD на одинаковых и сдвинутых распределениях; bootstrap CI \\
+\texttt{test\_attacker.py}     & генерация всех 7 шаблонов; FSM эмиссия тиков; drift-инжектор сдвигает признаки; runtime воспроизводим по seed \\
+\texttt{test\_alerting.py}     & уровни severity ladder; пропуск под порогом; дедупликация в окне; размер истории \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Соответствие реализации функциональным требованиям}
+
+В \tabref{tab:traceability} приведено сводное соответствие
+функциональных требований (FR-1…FR-10, сформулированных в
+\secref{ch:theory}) реализованным артефактам и тестовому покрытию.
+
+\begin{table}[H]
+\centering
+\caption{Соответствие реализации функциональным требованиям системы}
+\label{tab:traceability}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{4pt}
+\footnotesize
+\begin{tabularx}{\linewidth}{@{}p{2.6cm}Xp{2.8cm}@{}}
+\toprule
+\textbf{Требование} & \textbf{Артефакт реализации} & \textbf{Тест} \\
+\midrule
+FR-1: схема UNSW-NB15      & Pydantic-схема \texttt{schema.py}; валидация типов и диапазонов в \texttt{load.py}                        & \texttt{test\_configs} \\
+FR-2: препроцессинг + окна & \texttt{Preprocessor}, \texttt{build\_windows}                                                            & \texttt{test\_preprocess}, \texttt{test\_windowing} \\
+FR-3: модели ($\geq$ 14)   & 10 DL + 5 classical в едином registry \texttt{models/}                                                    & \texttt{test\_models\_smoke} \\
+FR-4: порог + калибровка   & поиск порога по target-FPR; температурное масштабирование \texttt{TemperatureScaler}                      & \texttt{test\_metrics} \\
+FR-5: формирование алертов & \texttt{AlertFormer} с severity ladder и temporal dedup                                                   & \texttt{test\_alerting} \\
+FR-6: REST-API             & FastAPI-сервис \texttt{inference/service.py}, эндпоинты \texttt{/score, /info, /alerts}                   & ручное smoke \\
+FR-7: визуальная панель    & Streamlit-дэшборд \texttt{ui/}                                                                            & ручное smoke \\
+FR-8: ИИ-злоумышленник     & \texttt{FSMAgent}, \texttt{DriftInjector}, \texttt{AttackerRuntime}                                       & \texttt{test\_attacker} \\
+FR-9: drift-monitoring     & функция \texttt{drift\_report} (PSI, KL, MMD)                                                             & \texttt{test\_metrics} \\
+FR-10: seed + журнал       & \texttt{set\_seed}; JSON-логи в \texttt{experiments/}                                                     & \texttt{test\_utils} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection*{Выводы по главе 3}
+
+\begin{enumerate}
+    \item Реализован программный прототип \texttt{diploma\_nids}
+    объёмом порядка 4230 строк Python с восемью подпакетами и
+    26 конфигурационными файлами.
+    \item Реализованы 15 моделей-кандидатов (10 нейросетевых и 5
+    классических) в едином registry с унифицированным интерфейсом.
+    \item Реализован ИИ-злоумышленник в архитектуре
+    \emph{templates + FSM + drift}, поддерживающий offline и online
+    режимы и обеспечивающий воспроизводимую ground-truth.
+    \item Реализованы подсистемы online-инференса (FastAPI),
+    алертирования с severity ladder и дедупликацией, и визуальной
+    панели (Streamlit), пригодные для эксплуатации в составе SOC.
+    \item Покрытие тестами включает 9 модулей; критические инварианты
+    pipeline проверены формально.
+\end{enumerate}

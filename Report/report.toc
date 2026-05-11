@@ -1,0 +1,69 @@
+\xpg@aux {}{russian}
+\contentsline {section}{РЕФЕРАТ}{2}{Doc-Start}%
+\contentsline {section}{ТЕРМИНЫ И ОПРЕДЕЛЕНИЯ}{7}{Doc-Start}%
+\contentsline {section}{ПЕРЕЧЕНЬ СОКРАЩЕНИЙ И УСЛОВНЫХ ОБОЗНАЧЕНИЙ}{9}{Doc-Start}%
+\contentsline {section}{ВВЕДЕНИЕ}{11}{Doc-Start}%
+\contentsline {section}{\numberline {1}Теоретический анализ методов обнаружения аномалий и обоснование требований к системе}{14}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Корпоративная сеть как объект мониторинга}{14}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Классификация и принципы построения IDS}{15}{subsection.1.2}%
+\contentsline {subsection}{\numberline {1.3}Методы обнаружения аномалий}{15}{subsection.1.3}%
+\contentsline {subsection}{\numberline {1.4}Глубинное обучение для анализа flow-данных}{16}{subsection.1.4}%
+\contentsline {subsection}{\numberline {1.5}Моделирование атак с использованием ИИ}{17}{subsection.1.5}%
+\contentsline {subsection}{\numberline {1.6}Сравнительный анализ датасетов NIDS}{18}{subsection.1.6}%
+\contentsline {subsection}{\numberline {1.7}Метрики качества}{19}{subsection.1.7}%
+\contentsline {subsection}{\numberline {1.8}Формализация требований и гипотеза}{20}{subsection.1.8}%
+\contentsline {section}{\numberline {2}Сравнительный анализ нейросетевых архитектур и проектирование методики обнаружения}{23}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Принципы сравнения и методологические замечания}{23}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Опубликованные результаты применения архитектур в NIDS}{23}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Обоснование выбора CNN-LSTM как основной архитектуры}{25}{subsection.2.3}%
+\contentsline {subsection}{\numberline {2.4}Теоретическая модель данных и pipeline обработки}{25}{subsection.2.4}%
+\contentsline {subsubsection}{\numberline {2.4.1}Схема признаков UNSW-NB15}{25}{subsubsection.2.4.1}%
+\contentsline {subsubsection}{\numberline {2.4.2}Pipeline обработки}{26}{subsubsection.2.4.2}%
+\contentsline {subsubsection}{\numberline {2.4.3}Унификация признаков с CICIDS2017 для cross-evaluation}{27}{subsubsection.2.4.3}%
+\contentsline {subsubsection}{\numberline {2.4.4}Управление дисбалансом классов}{29}{subsubsection.2.4.4}%
+\contentsline {subsection}{\numberline {2.5}Архитектура ИИ-злоумышленника}{29}{subsection.2.5}%
+\contentsline {subsection}{\numberline {2.6}Протокол экспериментов}{29}{subsection.2.6}%
+\contentsline {section}{\numberline {3}Программная реализация прототипа системы обнаружения и ИИ-злоумышленника}{32}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Стек и общая структура программного проекта}{32}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Подсистема обработки данных}{34}{subsection.3.2}%
+\contentsline {subsubsection}{\numberline {3.2.1}Схема и загрузка}{34}{subsubsection.3.2.1}%
+\contentsline {subsubsection}{\numberline {3.2.2}Препроцессор}{34}{subsubsection.3.2.2}%
+\contentsline {subsubsection}{\numberline {3.2.3}Скользящие окна}{34}{subsubsection.3.2.3}%
+\contentsline {subsection}{\numberline {3.3}Реализованные модели}{34}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}Подсистема обучения и оценки}{35}{subsection.3.4}%
+\contentsline {subsection}{\numberline {3.5}ИИ-злоумышленник}{38}{subsection.3.5}%
+\contentsline {subsubsection}{\numberline {3.5.1}Шаблоны атак}{38}{subsubsection.3.5.1}%
+\contentsline {subsubsection}{\numberline {3.5.2}Конечно-автоматный планировщик}{39}{subsubsection.3.5.2}%
+\contentsline {subsubsection}{\numberline {3.5.3}Drift-инжектор и runtime}{40}{subsubsection.3.5.3}%
+\contentsline {subsection}{\numberline {3.6}Подсистема online-инференса и интерфейс}{40}{subsection.3.6}%
+\contentsline {subsubsection}{\numberline {3.6.1}FastAPI-сервис}{40}{subsubsection.3.6.1}%
+\contentsline {subsubsection}{\numberline {3.6.2}Формирование алертов}{41}{subsubsection.3.6.2}%
+\contentsline {subsubsection}{\numberline {3.6.3}Streamlit-дэшборд}{41}{subsubsection.3.6.3}%
+\contentsline {subsection}{\numberline {3.7}Воспроизводимость и журналирование}{41}{subsection.3.7}%
+\contentsline {subsection}{\numberline {3.8}Покрытие тестами}{41}{subsection.3.8}%
+\contentsline {subsection}{\numberline {3.9}Соответствие реализации функциональным требованиям}{42}{subsection.3.9}%
+\contentsline {section}{\numberline {4}Экспериментальное исследование разработанной методики и обоснование выбора модели}{44}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Условия экспериментов}{44}{subsection.4.1}%
+\contentsline {subsubsection}{\numberline {4.1.1}Параметры разделения и препроцессинга}{44}{subsubsection.4.1.1}%
+\contentsline {subsection}{\numberline {4.2}Эксперимент E1: сравнение моделей-кандидатов}{45}{subsection.4.2}%
+\contentsline {subsubsection}{\numberline {4.2.1}Цель и условия}{45}{subsubsection.4.2.1}%
+\contentsline {subsubsection}{\numberline {4.2.2}Результаты}{45}{subsubsection.4.2.2}%
+\contentsline {subsubsection}{\numberline {4.2.3}Анализ E1}{46}{subsubsection.4.2.3}%
+\contentsline {subsection}{\numberline {4.3}Эксперимент E2: анализ ошибок CNN-LSTM}{47}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}Эксперимент E3: калибровка порогов}{49}{subsection.4.4}%
+\contentsline {subsection}{\numberline {4.5}Эксперимент E4: стресс-тест с ИИ-злоумышленником}{50}{subsection.4.5}%
+\contentsline {subsubsection}{\numberline {4.5.1}Цель и условия}{50}{subsubsection.4.5.1}%
+\contentsline {subsubsection}{\numberline {4.5.2}Результаты}{50}{subsubsection.4.5.2}%
+\contentsline {subsection}{\numberline {4.6}Эксперимент E5: устойчивость к дрейфу распределений}{52}{subsection.4.6}%
+\contentsline {subsubsection}{\numberline {4.6.1}Цель и условия}{52}{subsubsection.4.6.1}%
+\contentsline {subsubsection}{\numberline {4.6.2}Результаты}{52}{subsubsection.4.6.2}%
+\contentsline {subsection}{\numberline {4.7}Эксперимент E6: эксплуатационная производительность}{53}{subsection.4.7}%
+\contentsline {subsection}{\numberline {4.8}Демонстрационный прогон}{54}{subsection.4.8}%
+\contentsline {subsection}{\numberline {4.9}Кривые обучения DL-моделей}{55}{subsection.4.9}%
+\contentsline {subsection}{\numberline {4.10}Обоснование выбора CNN-LSTM для построения системы}{56}{subsection.4.10}%
+\contentsline {subsection}{\numberline {4.11}Подтверждение и уточнение гипотез исследования}{57}{subsection.4.11}%
+\contentsline {section}{ЗАКЛЮЧЕНИЕ}{60}{Item.55}%
+\contentsline {section}{ПРИЛОЖЕНИЯ}{68}{Item.61}%
+\contentsline {subsection}{Приложение А. Полная таблица результатов E1}{68}{section*.28}%
+\contentsline {subsection}{Приложение Б. Структура программного прототипа}{69}{table.Alph0.1}%
+\contentsline {subsection}{Приложение В. Конфигурации экспериментов}{69}{table.Alph0.1}%

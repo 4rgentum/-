@@ -1,0 +1,191 @@
+% =====================================================================
+%  Преамбула отчёта о НИР (ГОСТ 7.32-2017)
+%  Сборка: XeLaTeX + Biber
+%  Стиль библиографии: ГОСТ Р 7.0.100-2018 (biblatex-gost)
+% =====================================================================
+
+% Кодировка и шрифты
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\setsansfont{Arial}
+% Consolas содержит кириллицу (в отличие от Courier New) и используется
+% как моноширинный шрифт; одновременно объявляется как \cyrillicfonttt
+% для polyglossia, что устраняет предупреждения при наборе \verb{...}
+% с русским текстом.
+\setmonofont{Consolas}[Scale=0.92]
+\newfontfamily\cyrillicfonttt{Consolas}[Scale=0.92]
+
+\usepackage{polyglossia}
+\setdefaultlanguage{russian}
+\setotherlanguage{english}
+
+% Геометрия страницы (ГОСТ 7.32-2017, п. 6.1):
+% левое 30 мм, правое 15 мм, верхнее 20 мм, нижнее 20 мм
+\usepackage[a4paper, left=30mm, right=15mm, top=20mm, bottom=20mm,
+            footskip=10mm]{geometry}
+
+% Межстрочный интервал 1.5 (ГОСТ 7.32-2017, п. 6.3)
+\usepackage{setspace}
+\onehalfspacing
+
+% Абзацный отступ 1.25 см
+\usepackage{indentfirst}
+\setlength{\parindent}{1.25cm}
+
+% Математика
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+
+% Графика, таблицы, списки
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{enumitem}
+\setlist{nosep, leftmargin=*}
+
+% Цвет, ссылки, листинги
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+    pdfencoding=auto,
+    bookmarksnumbered=true,
+    bookmarksopen=true,
+    colorlinks=false
+}
+\usepackage{listings}
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    showstringspaces=false,
+    keywordstyle=\bfseries,
+    columns=fullflexible,
+    captionpos=b,
+    frame=single,
+    aboveskip=8pt,
+    belowskip=8pt
+}
+
+% Заголовки и оглавление
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Библиография по ГОСТ Р 7.0.100-2018
+\usepackage[
+    backend=biber,
+    style=gost-numeric,
+    language=auto,
+    sorting=none,
+    maxbibnames=4,
+    minbibnames=1
+]{biblatex}
+
+% Дополнительные служебные пакеты
+\usepackage{csquotes}
+\usepackage{etoolbox}
+\usepackage{url}
+\usepackage[activate={true,nocompatibility},final,
+            tracking=true,kerning=true,spacing=true,
+            factor=1100,stretch=20,shrink=20]{microtype}
+\usepackage{xurl}
+
+% Разрешаем переносы внутри \verb-выражений с длинными словами
+\usepackage{seqsplit}
+
+% Разрешаем перенос длинных URL и моноширинных слов с подчёркиваниями
+\PassOptionsToPackage{hyphens}{url}
+\sloppy
+\emergencystretch=3em
+\hbadness=10000      % подавить underfull-предупреждения о хорошо
+\vbadness=10000      % набранных страницах
+\hfuzz=2pt           % допускать overfull <= 2pt без warning
+\vfuzz=2pt
+
+% Параметры качества разрыва строк (помогают вписать русский текст
+% в узкие ячейки таблиц и абзацы со ссылками на источники)
+\hyphenpenalty=1000
+\tolerance=2000
+
+% Сброс счётчиков таблиц, рисунков и формул при начале новой секции
+% (требование сквозной нумерации в пределах раздела по ГОСТ 7.32-2017,
+% п. 6.5.3 для рисунков, п. 6.6.2 для таблиц, п. 6.7.1 для формул)
+\makeatletter
+\@addtoreset{table}{section}
+\@addtoreset{figure}{section}
+\@addtoreset{equation}{section}
+\makeatother
+
+% =====================================================================
+% Стиль ГОСТ 7.32-2017
+% =====================================================================
+\titleformat{\section}
+    {\normalfont\fontsize{14}{17}\bfseries}
+    {\thesection}{1em}{}
+\titlespacing*{\section}{\parindent}{18pt}{12pt}
+
+\titleformat{\subsection}
+    {\normalfont\fontsize{14}{17}\bfseries}
+    {\thesubsection}{1em}{}
+\titlespacing*{\subsection}{\parindent}{14pt}{10pt}
+
+\titleformat{\subsubsection}
+    {\normalfont\fontsize{14}{17}\bfseries}
+    {\thesubsubsection}{1em}{}
+\titlespacing*{\subsubsection}{\parindent}{12pt}{8pt}
+
+% Нумерация рисунков, таблиц, формул --- в пределах раздела
+\renewcommand{\thefigure}{\arabic{section}.\arabic{figure}}
+\renewcommand{\thetable}{\arabic{section}.\arabic{table}}
+\renewcommand{\theequation}{\arabic{section}.\arabic{equation}}
+
+% Подписи по ГОСТ
+\captionsetup[figure]{
+    labelsep=endash, name=Рисунок,
+    justification=centering, singlelinecheck=true,
+    font=normalsize
+}
+\captionsetup[table]{
+    labelsep=endash, name=Таблица,
+    justification=raggedright, singlelinecheck=false,
+    font=normalsize
+}
+% Подписи внутри longtable наследуют те же настройки --- название
+% «Таблица N — ...» помещается над таблицей по левому краю (ГОСТ 7.32-2017).
+\captionsetup[longtable]{
+    labelsep=endash, name=Таблица,
+    justification=raggedright, singlelinecheck=false,
+    font=normalsize
+}
+
+% Колонтитулы
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\renewcommand{\contentsname}{\hfill СОДЕРЖАНИЕ\hfill}
+
+% =====================================================================
+% Пользовательские команды
+% =====================================================================
+\newcommand{\figref}[1]{рисунок~\ref{#1}}
+\newcommand{\tabref}[1]{таблица~\ref{#1}}
+\newcommand{\secref}[1]{раздел~\ref{#1}}
+\newcommand{\eng}[1]{\textit{#1}}
+
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\softmax}{softmax}
+\DeclareMathOperator{\KL}{KL}
+\DeclareMathOperator{\MMD}{MMD}
+\DeclareMathOperator{\PSI}{PSI}
+
+% Метка последней страницы для реферата
+\usepackage{lastpage}
