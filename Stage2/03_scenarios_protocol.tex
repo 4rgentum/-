@@ -1,0 +1,320 @@
+% =====================================================================
+%  Stage 2, раздел 3.
+%  Синтетические тестовые сценарии и протокол экспериментов.
+% =====================================================================
+
+\section{Синтетические тестовые сценарии и протокол экспериментов}
+
+\subsection{Назначение раздела}
+
+В разделе формализованы (а) библиотека синтетических тестовых сценариев,
+формируемая ИИ-злоумышленником, и (б) протокол экспериментов Этапа~4 ВКР.
+Раздел является связующим звеном между методическими решениями
+разделов~1--2 настоящего отчёта (Этап~2) и реализацией прототипа на
+Этапе~3.
+
+\subsection{Библиотека синтетических атакующих сценариев}
+
+В соответствии с обоснованием раздела~3 Этапа~1, библиотека реализуется
+в виде набора параметризованных шаблонов, согласованных с таксономией
+UNSW-NB15. Перечень и параметры шаблонов приведены в
+\tabref{tab:attack-templates}.
+
+\begin{table}[H]
+\centering
+\caption{Библиотека синтетических атакующих шаблонов}
+\label{tab:attack-templates}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\linewidth}{@{}lXX@{}}
+\toprule
+\textbf{Шаблон} & \textbf{Параметризация} & \textbf{Соответствие классу UNSW-NB15} \\
+\midrule
+\texttt{ddos\_synflood} &
+интенсивность \(\lambda_0\), длительность \(\Delta\), доля SYN-флагов,
+распределение исходных IP &
+DoS \\
+\addlinespace
+\texttt{port\_scan} &
+скорость подключений \(\rho\), диапазон портов, режим (последовательный /
+случайный), длительность сессии &
+Reconnaissance \\
+\addlinespace
+\texttt{brute\_force} &
+интервал между попытками, целевой порт (22, 3389, 80, 443),
+доля успешных авторизаций &
+Reconnaissance / Exploits \\
+\addlinespace
+\texttt{exploit\_payload} &
+размер payload, нестандартные сочетания TCP-флагов, доля retransmissions &
+Exploits / Backdoors \\
+\addlinespace
+\texttt{data\_exfil} &
+длительность сессии, асимметрия \(b_{out}/b_{in}\), стабильность скорости,
+прикладной сервис &
+Backdoors / Worms \\
+\addlinespace
+\texttt{internal\_recon} &
+фан-аут потоков (число destinations за период), периодичность,
+размер сессии &
+Reconnaissance \\
+\addlinespace
+\texttt{worm\_lateral} &
+число направленных потоков, периодичность, размер сессии,
+распределение destinations &
+Worms \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Каждый шаблон возвращает упорядоченную последовательность flow-векторов,
+семантически согласованную с признаковой схемой UNSW-NB15. Параметры по
+умолчанию выбраны из обоснованных в литературе диапазонов
+характеристик каждого класса
+атак~\cite{moustafa2015unsw, sharafaldin2018toward, sharafaldin2019ddos,
+khraisat2019survey}.
+
+\subsection{Конечно-автоматная политика агента}
+
+Конечный автомат агента, формализованный в разделе~3 Этапа~1, в текущем
+протоколе принимает следующее множество состояний:
+\[
+\mathcal{S} =
+\{\text{NORMAL}\} \cup
+\{\text{ATTACK}(c)\}_{c \in \{\,\text{ddos, scan, brute, exploit, exfil, intrec, worm}\,\}} \cup
+\{\text{DRIFT}(k)\}_{k \in \{\,\text{cov, prior, concept}\,\}}.
+\]
+
+Политика \(\pi\) задаётся вероятностями переходов, минимальными длительностями
+состояний и параметрами рандомизации шаблонов.
+
+\subsection{Протокол валидации генератора}
+
+Перед использованием в экспериментах E1--E6 (см. ниже) генератор проходит
+валидацию по двум критериям, формализованным в разделе~3 Этапа~1:
+
+\begin{enumerate}
+    \item \textbf{Маргинальное соответствие нормы.} Двувыборочный тест
+    Колмогорова--Смирнова и MMD-сравнение распределений признаков
+    \emph{dur, sbytes, dbytes, sttl, sintpkt, dintpkt} режима NORMAL агента
+    с распределениями нормального трафика обучающей выборки UNSW-NB15.
+    Условие приёма: $p\text{-value}_{\text{KS}} > 0{,}01$ и MMD не
+    превышает 95-перцентиля bootstrap-распределения.
+    \item \textbf{Семантическая согласованность атак.} Сравнение средних и
+    медиан ключевых признаков (\emph{dur, sbytes, dbytes, sintpkt}) для
+    каждого ATTACK-состояния с соответствующим классом UNSW-NB15
+    (DoS, Reconnaissance, Exploits, Backdoors, Worms). Условие приёма:
+    относительное отклонение средних не более 25\% и совпадение знака
+    асимметрии распределений.
+\end{enumerate}
+
+При невыполнении условий приёма параметры шаблона корректируются до
+выполнения; результаты валидации фиксируются в журнале и приводятся в
+отчёте Этапа~4.
+
+\subsection{Протокол экспериментов}
+
+В \tabref{tab:experiments} зафиксированы шесть экспериментов с указанием
+цели, входов, метрик и условий принятия гипотезы.
+
+\begin{table}[H]
+\centering
+\caption{Протокол экспериментов Этапа~4 ВКР}
+\label{tab:experiments}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\linewidth}{@{}lXXX@{}}
+\toprule
+\textbf{ID} & \textbf{Цель и условия} & \textbf{Метрики} & \textbf{Критерий принятия} \\
+\midrule
+E1 &
+Сравнение моделей-кандидатов (CNN-LSTM, BiLSTM, LSTM, GRU, 1D-CNN, MLP,
+Transformer, AE, VAE, RF, XGBoost, LR, IF, OCSVM) на UNSW-NB15;
+\(\geq 5\) seed; одинаковый препроцессинг и пороги &
+Precision, Recall, F1, MCC, PR-AUC, ROC-AUC; \(\sigma_{F1}\) &
+\(F_1^{\text{CNN-LSTM}} \geq 0{,}90\); статистически значимое
+($p < 0{,}05$, парный Уилкоксон) превосходство над ансамблем baselines \\
+\addlinespace
+E2 &
+Анализ ошибок (FP/FN) лучшей модели; разрезы по \emph{attack\_cat},
+по протоколу, по сервису &
+confusion matrix, FN/FP по классам, ROC по классам &
+явное отображение классов, в которых F1 ниже среднего значения по тесту \\
+\addlinespace
+E3 &
+Калибровка порога; температурное масштабирование &
+ECE, FP-rate vs Recall, FP-per-time, TTD &
+наличие рабочей точки, удовлетворяющей NFR-2 \\
+\addlinespace
+E4 &
+Тестирование с ИИ-злоумышленником на стенде; 6 шаблонных сценариев
++ 3 drift-сценария &
+Precision, Recall, F1, TTD, FP-per-time;
+ground truth из FSM-журнала &
+\(\Delta F_1 \leq 0{,}10\) при agent-NORMAL+ATTACK без drift; TTD$\leq W$
+для шаблонов с явными flow-проявлениями \\
+\addlinespace
+E4' &
+Cross-evaluation: train UNSW $\to$ test CICIDS2017
+без дообучения и c дообучением на 10\% &
+Precision, Recall, F1, PR-AUC, $\Delta F_1$ относительно UNSW &
+$\Delta F_1 \leq 0{,}20$ без дообучения; $\leq 0{,}10$ с дообучением \\
+\addlinespace
+E5 &
+Drift-устойчивость; PSI/MMD-инжектирование &
+PSI, MMD, $\Delta F_1$ vs PSI; время восстановления (recovery time) &
+$\Delta F_1 \leq 0{,}10$ при PSI $\leq 0{,}25$; срабатывание
+drift-monitor \\
+\addlinespace
+E6 &
+Эксплуатационная производительность &
+inference latency (ms / window),
+throughput (EPS), CPU/RAM &
+NFR-3, NFR-4 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Меры обеспечения статистической достоверности}
+
+В соответствии с замечаниями TESSERACT~\cite{pendlebury2019tesseract} и
+обзоров~\cite{khraisat2019survey, sommer2010outside} для каждого эксперимента
+реализуются:
+
+\begin{enumerate}
+    \item \textbf{Множественные seed.} \(n \geq 5\) независимых запусков
+    с фиксированными seed, отчётность по среднему и доверительному интервалу
+    95\% (bootstrap, \(B = 1000\)).
+    \item \textbf{Парные сравнения.} При сравнении пар моделей по seed
+    применяется парный критерий Уилкоксона.
+    \item \textbf{Запрет утечки.} Train/val/test-разделение по времени;
+    препроцессорные статистики --- только по train.
+    \item \textbf{Калибровка.} Все модели с поддержкой
+    \(\hat{p}\) проходят температурное масштабирование на val-выборке;
+    отчётность по ECE до и после.
+    \item \textbf{Воспроизводимость.} Версионирование кода (commit hash),
+    конфигов и данных; журнал \texttt{run\_id} для каждого запуска.
+\end{enumerate}
+
+\subsection{Базовые модели для сравнения}
+
+Базовые модели (\emph{baselines}), используемые в эксперименте E1, и их
+роль в работе приведены в \tabref{tab:baselines}.
+
+\begin{table}[H]
+\centering
+\caption{Базовые модели сравнения, используемые в эксперименте E1}
+\label{tab:baselines}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{@{}lXX@{}}
+\toprule
+\textbf{Модель} & \textbf{Тип} & \textbf{Назначение} \\
+\midrule
+Logistic Regression &
+линейная supervised & нижняя граница линейного классификатора \\
+Random Forest~\cite{breiman2001rf} &
+ансамбль supervised & сильный baseline на табличных данных \\
+XGBoost~\cite{chen2016xgboost} &
+бустинг supervised & сильный baseline на табличных данных \\
+MLP &
+DL supervised & DL-baseline без учёта структуры \\
+1D-CNN &
+DL supervised & DL-baseline с локальной структурой \\
+LSTM~\cite{hochreiter1997lstm} &
+DL supervised & DL-baseline с временной структурой \\
+GRU~\cite{cho2014gru} &
+DL supervised & облегчённая RNN \\
+BiLSTM &
+DL supervised & альтернативная сильная DL-архитектура \\
+TCN~\cite{bai2018tcn} &
+DL supervised & альтернатива RNN \\
+Transformer-encoder~\cite{vaswani2017attention} &
+DL supervised & attention-based альтернатива \\
+Autoencoder~\cite{mirsky2018kitsune} &
+DL semi-supervised & контрольный AE \\
+VAE~\cite{kingma2014vae, lopez2017cvae} &
+DL semi-supervised & контрольный VAE \\
+Isolation Forest~\cite{liu2008isolation} &
+unsupervised & классический unsupervised \\
+One-Class SVM~\cite{scholkopf2001ocsvm} &
+unsupervised / one-class & классический one-class \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Сводная диаграмма экспериментального стенда}
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.94\linewidth}
+\small
+\begin{verbatim}
++----------------------------+        +----------------------------+
+|  UNSW-NB15  (raw CSV)      |        |  CICIDS2017 (raw CSV)      |
++--------------+-------------+        +--------------+-------------+
+               | preprocess + windowing              | preprocess + map
+               v                                     v
++----------------------------+        +----------------------------+
+|  Train / Val / Test         |       |  CICIDS2017 test (cross)   |
++--------------+--------------+       +--------------+--------------+
+               | E1, E2, E3                          | E4'
+               v                                     v
++--------------------------------------------------------------+
+|              Models pool (Tab. 3.4): CNN-LSTM, ...           |
++----+--------------------+-----------------+------------+-----+
+     | E1                 | E3              | E5        | E6
+     v                    v                 v           v
++----------+        +----------+      +-----------+   +-----------+
+| Compare  |        | Calibr.  |      | Drift inj |   | Lat./Thr. |
++----------+        +----------+      +-----------+   +-----------+
+     ^                   ^                  ^             ^
+     | E4                                                 |
+     |                                                    |
++----+-----------------------------+                      |
+|  AI Attacker (templates+FSM+drift) -------- stream ----+
++----------------------------------+
+\end{verbatim}
+\end{minipage}
+\caption{Концептуальная схема экспериментального стенда}
+\label{fig:experiment-stand}
+\end{figure}
+
+\subsection{Критерии успеха Этапа~4}
+
+Этап~4 считается выполненным, если выполнены следующие условия.
+
+\begin{enumerate}
+    \item Полностью проведены эксперименты E1--E6, оформлены таблицы и
+    графики метрик, графики обучения, confusion matrix.
+    \item Гипотезы $H_0^{\text{main}}$, $H_0^{\text{aux}}$ и
+    $H_0^{\text{transfer}}$ либо подтверждены при выполнении соответствующих
+    NFR, либо обоснованно опровергнуты с указанием конкретных условий
+    невыполнения.
+    \item Сформирован итоговый отчёт с разделом ``Ограничения и направления
+    дальнейшего развития'', явно фиксирующим невыполненные пункты и причины.
+\end{enumerate}
+
+\subsection{Промежуточные выводы по разделу}
+
+\begin{enumerate}
+    \item Сформирована библиотека из семи параметризованных шаблонов
+    атакующих сценариев, согласованных с таксономией UNSW-NB15, с явной
+    спецификацией параметров и привязкой каждого шаблона к классу датасета.
+    \item Описаны конечно-автоматная политика агента, протокол валидации
+    генератора (маргинальное соответствие нормы по KS и MMD;
+    семантическая согласованность атак по средним и медианам).
+    \item Сформирован протокол шести экспериментов (E1--E6 + E4') с
+    явными целями, метриками и критериями принятия. Для всех экспериментов
+    задана статистическая методология (множественные seed, bootstrap CI,
+    парный критерий Уилкоксона).
+    \item Зафиксирован пул из 14 моделей-кандидатов и baselines с
+    указанием их роли в эксперименте E1; все модели обучаются и
+    оцениваются в равных условиях, что устраняет ограничения, выявленные
+    в опубликованной NIDS-литературе.
+    \item Приведена диаграмма экспериментального стенда, отражающая
+    взаимодействие подсистем: данные (UNSW-NB15, CICIDS2017),
+    модели, активный тестовый источник (ИИ-злоумышленник) и блоки
+    калибровки, drift-инжекции и измерения производительности.
+\end{enumerate}

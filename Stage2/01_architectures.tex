@@ -1,0 +1,535 @@
+% =====================================================================
+%  Stage 2, раздел 1.
+%  Сравнительный анализ архитектур нейронных сетей для NIDS.
+%  Опубликованные результаты применения архитектур
+%  с явным указанием первоисточников.
+% =====================================================================
+
+\section{Сравнительный анализ архитектур нейронных сетей для обнаружения вторжений}
+
+\subsection{Принципы и методология сравнения}
+
+Цель раздела --- сопоставить архитектуры нейронных сетей, рассмотренные в
+теоретической части (Этап~1, раздел~1.4), на основе экспериментальных
+результатов, опубликованных в рецензируемых источниках в применениях,
+структурно эквивалентных задаче настоящей работы --- бинарной/мультиклассовой
+детекции аномалий в flow-представлении сетевого трафика.
+
+Для каждой архитектуры приводятся:
+\begin{itemize}
+    \item первоисточник (научная работа, в которой опубликован результат);
+    \item использованный датасет;
+    \item постановка задачи (\emph{binary} либо \emph{multiclass});
+    \item конкретное количественное значение метрики, опубликованное в работе.
+\end{itemize}
+
+\textbf{Методологическое замечание.} Прямое количественное сравнение
+результатов из разных источников некорректно по следующим причинам.
+\begin{enumerate}
+    \item Используются разные датасеты (NSL-KDD, KDD Cup 99, UNSW-NB15,
+    CICIDS2017) с принципиально различающимися моделями угроз и распределениями
+    признаков~\cite{moustafa2016eval, sommer2010outside, sharafaldin2018toward}.
+    \item Используются различные схемы препроцессинга, селекции признаков и
+    разделения выборок~\cite{khraisat2019survey, ferrag2020dlcyber}.
+    \item Метрики (\emph{Accuracy, Detection Rate, F1, Precision, Recall, AUC})
+    интерпретируются в разных задачах различно; в условиях сильного
+    дисбаланса классов \emph{Accuracy} даёт оптимистическую
+    оценку~\cite{khraisat2019survey, liu2019survey}.
+\end{enumerate}
+
+Поэтому опубликованные результаты используются здесь как качественные
+индикаторы пригодности архитектуры в NIDS-контексте и для теоретического
+обоснования предположения о работоспособности модели на UNSW-NB15. Прямое
+количественное сравнение моделей-кандидатов в равных условиях будет
+выполнено в собственном эксперименте Этапа~4 настоящей работы.
+
+\subsection{Расширенная теоретическая база сравниваемых архитектур}
+
+В раздел~1 Этапа~1 вошло базовое описание архитектур; здесь приводятся
+дополнительные характеристики, существенные для NIDS-применения.
+
+\subsubsection{Полносвязные сети (DNN/MLP)}
+
+В контексте flow-данных DNN рассматривается как нелинейный классификатор
+над агрегированными признаками отдельного flow-вектора. Стандартная
+композиция включает 2--5 скрытых слоёв с ReLU-активациями и dropout-регуляризацией.
+Глубина свыше пяти слоёв в задачах NIDS, по данным
+обзоров~\cite{vinayakumar2019dl, ferrag2020dlcyber, ahmad2021nids}, не
+приводит к устойчивому улучшению качества.
+
+\subsubsection{1D-CNN над окнами flow-векторов}
+
+Приложение свёрточных слоёв в NIDS интерпретируется как извлечение
+\emph{мотивов} (\eng{motifs}) во времени или в признаковой строке.
+Стандартная конфигурация: один--три блока \texttt{Conv1D-BatchNorm-ReLU}
+с пуллингом, размер ядра \(K \in \{3, 5, 7\}\). При обработке
+последовательности окон используется ширина окна
+\(W \in \{8, 16, 32, 64\}\), что согласуется с эксплуатационными
+характеристиками IPFIX-коллекторов~\cite{rfc7011}.
+
+\subsubsection{Рекуррентные сети: LSTM, GRU, BiLSTM}
+
+В flow-представлении один временной шаг соответствует одному соединению или
+агрегированному окну. LSTM/GRU моделируют долгосрочные зависимости между
+соединениями, что востребовано для атак с нерегулярной временной структурой
+(slow brute-force, low-and-slow exfiltration). BiLSTM использует контекст в
+обоих направлениях, что даёт прирост качества за счёт повышенной задержки.
+
+\subsubsection{Гибрид CNN--LSTM}
+
+Иерархия \texttt{Conv1D $\to$ Pooling $\to$ LSTM $\to$ FC} извлекает локальные
+паттерны (CNN) и моделирует их временную динамику (LSTM). Гибрид является
+устоявшейся и активно публикуемой
+архитектурой~\cite{vinayakumar2019dl, ferrag2020dlcyber, ahmad2021nids}.
+
+\subsubsection{TCN}
+
+\emph{Temporal Convolutional Network}~\cite{bai2018tcn} реализует
+последовательное моделирование на основе причинных дилатированных свёрток.
+В NIDS-публикациях TCN встречается реже LSTM/CNN-LSTM; преимущество ---
+параллелизуемость; ограничение --- фиксированное рецептивное поле.
+
+\subsubsection{Transformer-encoder}
+
+Применение Transformer к flow-последовательностям требует позиционного
+кодирования и достаточного объёма данных для устойчивого обучения. В
+NIDS-публикациях Transformer применяется реже CNN-LSTM;
+обзоры~\cite{ferrag2020dlcyber, ahmad2021nids} отмечают сопоставимое или
+несколько лучшее качество, но повышенную дисперсию по seed.
+
+\subsubsection{Autoencoder и VAE}
+
+Автоэнкодер обучается на нормальном трафике и идентифицирует аномалии
+через ошибку реконструкции; такой режим (\emph{semi-supervised}) ценен
+тем, что не требует разметки атак. Эталонная online-реализация для
+NIDS --- Kitsune~\cite{mirsky2018kitsune} --- использует ансамбль
+автоэнкодеров с инкрементальным обучением.
+
+\subsection{Опубликованные результаты применения DNN/MLP}
+
+В \tabref{tab:dnn-results} сведены опубликованные результаты применения
+DNN/MLP-моделей к NIDS-датасетам. Источниками являются рецензируемые работы
+по обнаружению вторжений на основе глубокого обучения.
+
+\begin{table}[H]
+\centering
+\caption{Опубликованные результаты применения DNN/MLP в NIDS}
+\label{tab:dnn-results}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\linewidth}{@{}lXlXX@{}}
+\toprule
+\textbf{Источник} & \textbf{Архитектура} & \textbf{Датасет} &
+\textbf{Постановка} & \textbf{Опубликованный результат} \\
+\midrule
+Vinayakumar и соавт.~\cite{vinayakumar2019dl} &
+DNN, 1--5 скрытых слоёв (\eng{DNN1\dots DNN5}) &
+NSL-KDD, KDD Cup 99, UNSW-NB15, CICIDS2017, WSN-DS &
+binary и multiclass &
+В зависимости от датасета и числа слоёв; авторы рекомендуют DNN из 3--5 слоёв
+как универсальную конфигурацию по совокупности accuracy, precision, recall \\
+\addlinespace
+Sharafaldin и соавт.~\cite{sharafaldin2018toward} &
+MLP &
+CICIDS2017 &
+multiclass &
+Precision $\approx 0{,}77$; Recall $\approx 0{,}83$
+(уступает RF/ID3, опубликованным в той же работе) \\
+\addlinespace
+Moustafa и Slay~\cite{moustafa2016eval} &
+ANN &
+UNSW-NB15 &
+binary &
+Accuracy $\approx 81{,}3\%$; FAR $\approx 18{,}4\%$ \\
+\addlinespace
+Khraisat и соавт.~\cite{khraisat2019survey} (обзор) &
+DNN &
+NSL-KDD, UNSW-NB15 &
+binary, multiclass &
+Сводные диапазоны Accuracy
+$80\text{--}95\%$ для современных DL-моделей; результаты сильно
+зависят от препроцессинга \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Из \tabref{tab:dnn-results} видно, что DNN/MLP --- адекватная нижняя
+граница DL-моделей в NIDS, но устойчиво уступает архитектурам, способным
+учитывать локальные и временные структуры (см. далее).
+
+\subsection{Опубликованные результаты применения 1D-CNN}
+
+В \tabref{tab:cnn-results} приведены опубликованные результаты применения
+свёрточных архитектур.
+
+\begin{table}[H]
+\centering
+\caption{Опубликованные результаты применения 1D-CNN в NIDS}
+\label{tab:cnn-results}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\linewidth}{@{}lXlXX@{}}
+\toprule
+\textbf{Источник} & \textbf{Архитектура} & \textbf{Датасет} &
+\textbf{Постановка} & \textbf{Опубликованный результат} \\
+\midrule
+Vinayakumar и соавт.~\cite{vinayakumar2019dl} &
+1D-CNN с пуллингом &
+NSL-KDD, UNSW-NB15, KDD Cup 99, CICIDS2017 &
+binary и multiclass &
+Стабильное превосходство над DNN/MLP по metric F1 на тех же датасетах,
+по данным авторов; усиление эффекта при увеличении длины окна \\
+\addlinespace
+Ferrag и соавт.~\cite{ferrag2020dlcyber} (обзор и собственные эксперименты) &
+1D-CNN &
+CSE-CIC-IDS2018 и Bot-IoT &
+multiclass &
+1D-CNN включён в семёрку наиболее перспективных архитектур по сводной
+оценке F1 на крупных современных датасетах \\
+\addlinespace
+Liu и Lang~\cite{liu2019survey} (обзор) &
+CNN различных конфигураций &
+KDD-семейство, UNSW-NB15 &
+binary, multiclass &
+Опубликованные значения accuracy в применениях CNN $\geq 90\%$ для большинства
+рассмотренных работ; качество выше при использовании CNN-блоков на окнах
+последовательных flow \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Опубликованные результаты применения LSTM/GRU/BiLSTM}
+
+В \tabref{tab:rnn-results} приведены опубликованные результаты для
+рекуррентных архитектур.
+
+\begin{table}[H]
+\centering
+\caption{Опубликованные результаты применения LSTM/GRU/BiLSTM в NIDS}
+\label{tab:rnn-results}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\linewidth}{@{}lXlXX@{}}
+\toprule
+\textbf{Источник} & \textbf{Архитектура} & \textbf{Датасет} &
+\textbf{Постановка} & \textbf{Опубликованный результат} \\
+\midrule
+Kim и соавт.~\cite{kim2016lstm} &
+LSTM-RNN &
+KDD Cup 99 &
+binary &
+Accuracy $\approx 96{,}93\%$; Detection Rate $\approx 98{,}88\%$;
+False Alarm Rate $\approx 10{,}04\%$ \\
+\addlinespace
+Yin и соавт.~\cite{yin2017dlrnn} &
+RNN (стандартная) &
+NSL-KDD, KDDTest+ &
+binary &
+Accuracy $\approx 83{,}28\%$ (при 80 hidden units); существенное падение
+на KDDTest-21 \\
+\addlinespace
+Yin и соавт.~\cite{yin2017dlrnn} &
+RNN (стандартная) &
+NSL-KDD, KDDTest+ &
+multiclass &
+Accuracy $\approx 81{,}29\%$ \\
+\addlinespace
+Vinayakumar и соавт.~\cite{vinayakumar2019dl} &
+LSTM, GRU &
+NSL-KDD, KDD Cup 99, UNSW-NB15 &
+binary, multiclass &
+LSTM и GRU сопоставимы по средней Accuracy и F1 на NSL-KDD/KDD Cup~99;
+GRU стабильно дешевле по числу параметров; на UNSW-NB15 LSTM уступает
+гибриду CNN-LSTM в той же работе \\
+\addlinespace
+Ahmad и соавт.~\cite{ahmad2021nids} (обзор) &
+LSTM, BiLSTM &
+NSL-KDD, UNSW-NB15, CICIDS2017 &
+binary, multiclass &
+BiLSTM устойчиво даёт прирост Accuracy/F1 относительно LSTM на NSL-KDD и
+UNSW-NB15 за счёт двунаправленного контекста \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Особо отметим методологические оговорки:
+\begin{itemize}
+    \item Высокая Accuracy и DR в~\cite{kim2016lstm} получены на
+    KDD Cup 99, корпусе с известными статистическими
+    дефектами~\cite{tavallaee2009nslkdd, sommer2010outside}; результат
+    рассматривается как историческая точка отсчёта, а не как практически
+    переносимая оценка.
+    \item Yin и соавт.~\cite{yin2017dlrnn} явно отмечают разрыв качества
+    между KDDTest+ и более сложным KDDTest-21, что подчёркивает
+    зависимость опубликованных метрик от выборки тестирования.
+\end{itemize}
+
+\subsection{Опубликованные результаты применения CNN--LSTM}
+
+В \tabref{tab:cnnlstm-results} сведены опубликованные результаты применения
+гибрида CNN--LSTM в задачах NIDS.
+
+\begin{table}[H]
+\centering
+\caption{Опубликованные результаты применения гибрида CNN--LSTM в NIDS}
+\label{tab:cnnlstm-results}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\linewidth}{@{}lXlXX@{}}
+\toprule
+\textbf{Источник} & \textbf{Архитектура} & \textbf{Датасет} &
+\textbf{Постановка} & \textbf{Опубликованный результат} \\
+\midrule
+Vinayakumar и соавт.~\cite{vinayakumar2019dl} &
+CNN-LSTM &
+NSL-KDD, KDD Cup 99, UNSW-NB15, CICIDS2017 &
+binary, multiclass &
+В семействе DL-моделей данной работы CNN-LSTM показал одни из
+наибольших значений F1 и Accuracy на UNSW-NB15 и CICIDS2017
+относительно DNN/CNN/LSTM той же работы \\
+\addlinespace
+Ferrag и соавт.~\cite{ferrag2020dlcyber} &
+CNN-LSTM &
+CSE-CIC-IDS2018, Bot-IoT, других &
+multiclass &
+CNN-LSTM фигурирует в перечне эталонных DL-моделей с устойчивыми F1 на
+тестовых разделениях; авторы фиксируют преимущество в обнаружении атак с
+выраженной временной структурой \\
+\addlinespace
+Liu и Lang~\cite{liu2019survey} (обзор) &
+Гибридные CNN-RNN &
+KDD-семейство, UNSW-NB15 &
+binary, multiclass &
+Гибридные подходы CNN-RNN наиболее устойчиво превосходят как чисто
+свёрточные, так и чисто рекуррентные базы по metric F1 в большинстве
+рассмотренных работ \\
+\addlinespace
+Ahmad и соавт.~\cite{ahmad2021nids} (обзор) &
+CNN-LSTM, BiLSTM &
+NSL-KDD, UNSW-NB15, CICIDS2017 &
+binary, multiclass &
+В обзоре отмечается, что CNN-LSTM и BiLSTM достигают наилучших Accuracy и F1
+в большинстве экспериментов на рассматриваемых датасетах \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Опубликованные результаты применения автоэнкодеров и VAE}
+
+В \tabref{tab:ae-results} сведены опубликованные результаты применения
+автоэнкодерных архитектур в NIDS.
+
+\begin{table}[H]
+\centering
+\caption{Опубликованные результаты применения AE/VAE в NIDS}
+\label{tab:ae-results}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\linewidth}{@{}lXlXX@{}}
+\toprule
+\textbf{Источник} & \textbf{Архитектура} & \textbf{Датасет} &
+\textbf{Постановка} & \textbf{Опубликованный результат} \\
+\midrule
+Mirsky и соавт.~\cite{mirsky2018kitsune} &
+Kitsune (ансамбль AE с инкрементальным обучением) &
+Mirai, OS Scan, SSL Renegotiation, SSDP Flood, ARP MitM, Active Wiretap, Fuzzing, Video Injection (собственный стенд) &
+\eng{semi-supervised, online} &
+По 9~атакам опубликованы значения AUC, среди которых:
+Mirai $\approx 0{,}9988$, SSDP Flood $\approx 0{,}9844$, ARP MitM $\approx 0{,}9606$ \\
+\addlinespace
+Lopez-Martin и соавт.~\cite{lopez2017cvae} &
+Conditional VAE &
+NSL-KDD &
+multiclass (4 класса) &
+По данным авторов CVAE превосходит ряд классических классификаторов
+(RF, MLP) на схеме оценки той же работы; конкретные значения см. в первоисточнике \\
+\addlinespace
+Andresini и соавт.~\cite{andresini2021autoencoder} &
+AE-based deep metric learning &
+NSL-KDD, AAGM, CICIDS2017 &
+binary &
+Авторы сообщают о превосходстве предложенного подхода над baseline-AE и
+RF/SVM-классификаторами по F1 на трёх датасетах \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Замечания по применимости AE/VAE.
+\begin{itemize}
+    \item Kitsune и его варианты эффективны в \emph{semi-supervised}-режиме
+    (обучение только на нормальном трафике), что выгодно отличает их от
+    supervised DL-моделей в условиях ограниченной разметки.
+    \item Сравнение с supervised-моделями некорректно по принципу: AE
+    решают задачу детекции аномалий, в то время как CNN-LSTM и аналоги в
+    данной работе нацелены на бинарную/мультиклассовую классификацию с
+    разметкой. В настоящей работе AE и VAE используются как контрольные
+    semi-supervised baselines.
+\end{itemize}
+
+\subsection{Сводное сравнение архитектур по опубликованным результатам}
+
+В \tabref{tab:summary-architectures} приведено сводное сопоставление
+архитектур по совокупности качественных характеристик и опубликованных
+данных.
+
+\begin{table}[H]
+\centering
+\caption{Сводное сопоставление архитектур по опубликованным
+NIDS-результатам и теоретическим характеристикам}
+\label{tab:summary-architectures}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{3pt}
+\footnotesize
+\begin{tabularx}{\linewidth}{@{}lXccXl@{}}
+\toprule
+\textbf{Архитектура} & \textbf{Локальные / временные структуры} &
+\textbf{Стоимость обучения} & \textbf{Inference latency} &
+\textbf{Опубликованные ориентиры качества (NIDS)} & \textbf{Источник} \\
+\midrule
+DNN/MLP & нет/нет        & низкая   & низкая   &
+наибольшая Accuracy на NSL-KDD/UNSW-NB15 в семействе DNN-1\dots5 &
+\cite{vinayakumar2019dl, sharafaldin2018toward, moustafa2016eval} \\
+\addlinespace
+1D-CNN  & да/огр.        & средняя  & низкая   &
+устойчивое преимущество над DNN на тех же датасетах в одной и той же работе &
+\cite{vinayakumar2019dl, ferrag2020dlcyber, liu2019survey} \\
+\addlinespace
+LSTM    & нет/да         & средняя  & средняя  &
+\(\approx 96{,}93\%\) Acc на KDD Cup 99 в~\cite{kim2016lstm}; уступает
+CNN-LSTM на UNSW-NB15 в~\cite{vinayakumar2019dl} &
+\cite{kim2016lstm, yin2017dlrnn, vinayakumar2019dl} \\
+\addlinespace
+GRU     & нет/да         & средняя  & низкая   &
+сопоставима с LSTM при меньшем числе параметров &
+\cite{vinayakumar2019dl, ahmad2021nids} \\
+\addlinespace
+BiLSTM  & нет/двунаправ. & высокая  & средняя  &
+прирост Accuracy/F1 по сравнению с LSTM на NSL-KDD и UNSW-NB15 &
+\cite{ahmad2021nids, ferrag2020dlcyber} \\
+\addlinespace
+\textbf{CNN-LSTM} & \textbf{да/да} & \textbf{высокая} & \textbf{средняя} &
+\textbf{превосходит DNN/CNN/LSTM в одной и той же работе на UNSW-NB15 и CICIDS2017} &
+\textbf{\cite{vinayakumar2019dl, ferrag2020dlcyber, liu2019survey, ahmad2021nids}} \\
+\addlinespace
+TCN         & да/фиксиров. & средняя  & низкая   &
+NIDS-публикаций существенно меньше; в обзорах рассматривается как
+альтернатива LSTM при ограничениях по latency &
+\cite{bai2018tcn, ferrag2020dlcyber} \\
+\addlinespace
+Transformer & через attention/да & высокая & средняя &
+сопоставимое с CNN-LSTM качество в обзорах при повышенной дисперсии по seed &
+\cite{vaswani2017attention, ferrag2020dlcyber, ahmad2021nids} \\
+\addlinespace
+AE          & косвенно/нет  & средняя & низкая &
+ансамбль AE Kitsune: AUC $> 0{,}96$ для большинства атак &
+\cite{mirsky2018kitsune, andresini2021autoencoder} \\
+\addlinespace
+VAE         & косвенно/нет  & средняя & низкая &
+CVAE превосходит ряд классических baselines на NSL-KDD &
+\cite{lopez2017cvae, kingma2014vae} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+В \tabref{tab:summary-architectures} обоснованно выделена строка
+CNN-LSTM: гибрид сочетает локальное (CNN) и временное (LSTM) моделирование,
+а в нескольких независимых рецензируемых
+источниках~\cite{vinayakumar2019dl, ferrag2020dlcyber, liu2019survey,
+ahmad2021nids} устойчиво демонстрирует одно из лучших значений F1 и
+Accuracy в внутренних сравнениях этих работ.
+
+\subsection{Ограничения сравнения и угрозы валидности}
+
+При интерпретации опубликованных результатов следует учитывать следующие
+ограничения, систематически отмечаемые в
+обзорной литературе~\cite{khraisat2019survey, sommer2010outside,
+pendlebury2019tesseract, gharib2016evalframework}.
+
+\begin{enumerate}
+    \item \textbf{Различия датасетов.} KDD Cup 99 и NSL-KDD не отражают
+    современную модель угроз; результаты на них завышают эффект
+    архитектуры и не переносятся на эксплуатационные сценарии. Следовательно,
+    высокие метрики LSTM-RNN на KDD Cup 99 (Kim и соавт.,
+    \(\approx 96{,}93\%\) Accuracy~\cite{kim2016lstm}) нельзя
+    интерпретировать как доказательство практической пригодности.
+    \item \textbf{Отсутствие контроля дрейфа.} Большинство работ оценивают
+    модели на статически фиксированных тестовых выборках, что приводит к
+    \emph{spatial bias}~\cite{pendlebury2019tesseract}; реальная
+    устойчивость моделей в потоковом сценарии остаётся неосвещённой.
+    \item \textbf{Несбалансированный учёт ложных срабатываний.} Опубликованные
+    значения часто относятся к Accuracy, не учитывающей стоимости FP при
+    дисбалансе. Работы, приводящие FP-rate, FAR или FP-per-time, остаются
+    в меньшинстве.
+    \item \textbf{Несравнимость baselines.} Между работами различается состав
+    baselines, что затрудняет ранжирование. Например,
+    в~\cite{vinayakumar2019dl} и~\cite{ahmad2021nids} CNN-LSTM сравнивается
+    с разными конфигурациями DNN/CNN/LSTM, и различие в относительных
+    приростах не указывает на устойчивое превосходство.
+\end{enumerate}
+
+Эти ограничения определяют необходимость собственного эксперимента в равных
+условиях, описание которого приведено в разделе~3 настоящего отчёта (Этап~2)
+и реализуется на Этапе~4 ВКР.
+
+\subsection{Обоснование выбора CNN--LSTM в качестве основной модели работы}
+\label{subsec:why-cnnlstm}
+
+С учётом теоретического анализа Этапа~1 и систематизированных опубликованных
+результатов, представленных в \tabref{tab:summary-architectures}, в качестве
+основной (\emph{proposed}) модели работы выбирается CNN--LSTM. Решение
+обосновывается следующими аргументами.
+
+\begin{enumerate}
+    \item \textbf{Соответствие природе данных.} Атаки в flow-представлении
+    проявляются одновременно как локальные паттерны (например, специфическое
+    сочетание признаков SYN-флуда в одном flow) и как временные тренды
+    (последовательность подобных flow). CNN--LSTM моделирует обе компоненты
+    в одной архитектуре~\cite{vinayakumar2019dl, ferrag2020dlcyber}.
+    \item \textbf{Опубликованные результаты.} В нескольких независимых
+    рецензируемых работах~\cite{vinayakumar2019dl, ferrag2020dlcyber,
+    liu2019survey, ahmad2021nids} CNN-LSTM демонстрирует наибольшие F1 и
+    Accuracy в \emph{внутреннем} сравнении с DNN, CNN, LSTM и BiLSTM
+    на UNSW-NB15 и CICIDS2017.
+    \item \textbf{Воспроизводимость.} Архитектура хорошо документирована,
+    реализуется стандартными примитивами PyTorch, не требует
+    специализированных техник обучения (как Transformer на ограниченных
+    выборках), что обеспечивает воспроизводимость экспериментов.
+    \item \textbf{Эксплуатационная стоимость.} Inference latency
+    CNN-LSTM, согласно обзорам~\cite{ferrag2020dlcyber, ahmad2021nids},
+    укладывается в диапазон, приемлемый для NTA-pipeline (десятки
+    миллисекунд при batch=1 на CPU); это совместимо с требованием NFR-3
+    раздела~4 Этапа~1.
+    \item \textbf{Альтернативы и контрольные модели.} В качестве альтернатив
+    в собственном эксперименте сохраняются BiLSTM (двунаправленный контекст)
+    и Transformer-encoder (attention); в качестве контрольных
+    semi-supervised baselines --- AE и VAE; в качестве классических baseline
+    --- Logistic Regression, Random Forest, XGBoost, Isolation Forest,
+    One-Class SVM.
+\end{enumerate}
+
+\subsection{Промежуточные выводы по разделу}
+
+\begin{enumerate}
+    \item Систематизированы опубликованные результаты применения восьми
+    типов архитектур в NIDS-задачах, эквивалентных постановке настоящей
+    работы. Все результаты приведены с указанием источника, датасета и
+    постановки.
+    \item Зафиксированы три группы методологических ограничений сравнения
+    (несовместимость датасетов, отсутствие контроля дрейфа, доминирование
+    Accuracy при дисбалансе классов), что определяет необходимость
+    собственного эксперимента в равных условиях.
+    \item Сводное сопоставление по характеристикам архитектур и опубликованным
+    NIDS-результатам подтверждает теоретический выбор CNN-LSTM как основной
+    архитектуры; альтернативами в равных условиях останутся BiLSTM и
+    Transformer-encoder, контрольными semi-supervised baselines --- AE и VAE,
+    классическими baseline --- LR/RF/XGBoost/IF/OCSVM.
+    \item Полученное обоснование является \emph{теоретическим} и подтверждается
+    \emph{ссылочным} образом; \emph{количественное} подтверждение возможно
+    только в собственном эксперименте, выполняемом на Этапе~4 ВКР по
+    протоколу, формализованному в разделе~3 настоящего отчёта.
+\end{enumerate}

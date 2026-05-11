@@ -1,0 +1,411 @@
+% =====================================================================
+%  Stage 2, раздел 2.
+%  Теоретическая модель данных и pipeline обработки.
+% =====================================================================
+
+\section{Теоретическая модель данных и pipeline обработки}
+
+\subsection{Схема признаков UNSW-NB15}
+
+UNSW-NB15~\cite{moustafa2015unsw, moustafa2016eval, unswportal} в составе
+\emph{cleaned}-распределения содержит 49 признаков, разделяемых на пять
+групп. Назначение каждой группы и её роль в детекции атак приведены в
+\tabref{tab:unsw-feature-groups}.
+
+\begin{table}[H]
+\centering
+\caption{Группы признаков UNSW-NB15 и их назначение}
+\label{tab:unsw-feature-groups}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{@{}lXX@{}}
+\toprule
+\textbf{Группа} & \textbf{Состав} & \textbf{Роль в детекции} \\
+\midrule
+Базовые потоковые &
+\emph{dur, proto, service, state, sbytes, dbytes, sttl, dttl, sloss, dloss}
+&
+непосредственное описание flow: длительность, протокол, состояние сессии,
+байты и пакеты в обе стороны \\
+\addlinespace
+Контентные &
+\emph{sload, dload, swin, dwin, smean, dmean, stcpb, dtcpb, trans\_depth,
+response\_body\_len} &
+скорости, окна TCP, базовые транзакционные характеристики \\
+\addlinespace
+Временные &
+\emph{sjit, djit, sintpkt, dintpkt, tcprtt, synack, ackdat} &
+межпакетные интервалы, джиттеры, RTT, timing-сигнатуры \\
+\addlinespace
+Дополнительные сгенерированные &
+\emph{ct\_state\_ttl, ct\_flw\_http\_mthd, is\_ftp\_login,
+ct\_ftp\_cmd} &
+агрегаты по протокольному поведению \\
+\addlinespace
+Контекстные \emph{ct\_*}&
+\emph{ct\_srv\_src, ct\_srv\_dst, ct\_dst\_ltm, ct\_src\_ltm,
+ct\_src\_dport\_ltm, ct\_dst\_sport\_ltm, ct\_dst\_src\_ltm} &
+агрегаты по последним 100 соединениям; косвенно отражают режим
+сканирования и фан-аут \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Метки представлены двумя полями: \emph{label} \(\in \{0, 1\}\) (бинарная) и
+\emph{attack\_cat} \(\in \mathcal{C} \cup \{\varnothing\}\) (мультиклассовая,
+с пустым значением для нормального трафика).
+
+\subsection{Схема признаков CICIDS2017 и подмножество для cross-evaluation}
+
+CICIDS2017~\cite{sharafaldin2018toward} формируется утилитой CICFlowMeter и
+содержит более 80 flow-признаков. Часть из них функционально эквивалентна
+полям UNSW-NB15 (длительность, протокол, число пакетов и байт в обе
+стороны, межпакетные интервалы, скорости передачи). Подмножество общих
+признаков, принимаемое в работе, представлено в
+\tabref{tab:common-features}.
+
+\begin{table}[H]
+\centering
+\caption{Подмножество признаков, общих для UNSW-NB15 и CICIDS2017,
+принятое для cross-evaluation}
+\label{tab:common-features}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{@{}lll@{}}
+\toprule
+\textbf{Семантика} & \textbf{UNSW-NB15} & \textbf{CICIDS2017 (CICFlowMeter)} \\
+\midrule
+Длительность потока       & \emph{dur}      & \emph{Flow Duration} \\
+Протокол транспорта        & \emph{proto}    & \emph{Protocol} \\
+Прикладной сервис          & \emph{service}  & \emph{Destination Port}+\emph{Service heuristics} \\
+Байты от источника         & \emph{sbytes}   & \emph{Total Length of Fwd Packets} \\
+Байты к источнику          & \emph{dbytes}   & \emph{Total Length of Bwd Packets} \\
+Пакеты от источника        & \emph{spkts}    & \emph{Total Fwd Packets} \\
+Пакеты к источнику         & \emph{dpkts}    & \emph{Total Backward Packets} \\
+TTL источника              & \emph{sttl}     & ---  (косвенно через \emph{Init\_Win\_bytes\_forward})\\
+Скорость источника         & \emph{sload}    & \emph{Fwd Packets/s} \\
+Скорость получателя        & \emph{dload}    & \emph{Bwd Packets/s} \\
+Межпакетный интервал, src  & \emph{sintpkt}  & \emph{Fwd IAT Mean} \\
+Межпакетный интервал, dst  & \emph{dintpkt}  & \emph{Bwd IAT Mean} \\
+Джиттер, src               & \emph{sjit}     & \emph{Fwd IAT Std} \\
+Джиттер, dst               & \emph{djit}     & \emph{Bwd IAT Std} \\
+SYN-ACK / ACK-DAT timings  & \emph{synack, ackdat} & \emph{Flow IAT}-агрегаты \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Признаки, не имеющие прямого аналога (TTL, ряд \emph{ct\_*}-агрегатов
+UNSW-NB15, специфические признаки CICFlowMeter), исключаются из набора
+cross-evaluation. Эта позиция фиксирована и применяется в эксперименте E4
+протокола (раздел~3 Этапа~2).
+
+\subsection{Pipeline обработки данных}
+
+Полный pipeline обработки данных принимает на вход поток flow-записей и
+формирует на выходе скоринг \(s(x)\) и решение \(\hat{y}\):
+
+\[
+\boxed{\;
+\text{IPFIX/CSV} \to
+\text{Schema-Valid} \to
+\text{Cleanup} \to
+\text{Encoding} \to
+\text{Scaling} \to
+\text{Windowing} \to
+\text{Model} \to
+\text{Threshold} \to
+\text{Alert}
+\;}
+\]
+
+Стадия каждого блока формализуется ниже.
+
+\subsection{Очистка данных}
+
+В UNSW-NB15 документированы~\cite{moustafa2015unsw} следующие виды
+``шума'': пропуски в полях \emph{ct\_flw\_http\_mthd, is\_ftp\_login,
+ct\_ftp\_cmd}, неконсистентные строковые значения \emph{service} и
+\emph{state}, отдельные крайние выбросы в \emph{dur, sbytes, dbytes}.
+Применяемая очистка:
+
+\begin{enumerate}
+    \item Замена нечисловых пропусков константой \texttt{"-"} (отсутствие
+    значения). Для числовых пропусков --- замена нулём, что согласуется с
+    интерпретацией признаков (отсутствие активности).
+    \item Унификация регистра и пробелов в \emph{service}, \emph{state},
+    \emph{proto}.
+    \item Удаление дубликатов по полному вектору признаков на стороне
+    обучающей выборки (исключение перекрёстной утечки).
+    \item Идентификация и обрезка выбросов в крайних \(0{,}1\%\) хвостов
+    распределений для \emph{dur, sbytes, dbytes, sload, dload}; границы
+    обрезки фиксируются по обучающей выборке и применяются к валидационной
+    и тестовой без пересчёта.
+\end{enumerate}
+
+Замечание: вся статистика для очистки и масштабирования вычисляется
+\emph{только} на обучающей выборке, что исключает test-time leakage.
+
+\subsection{Кодирование категориальных признаков}
+
+\subsubsection{One-hot}
+
+Для признака \(c\) с конечным алфавитом \(\mathcal{A}_c =
+\{a_1, \dots, a_K\}\) one-hot-вектор имеет вид
+\(e(c) = (\mathbb{I}[c=a_1], \dots, \mathbb{I}[c=a_K])^\top \in \{0,1\}^K\).
+Применимо для признаков с малой кардинальностью --- \emph{proto, state}.
+
+\subsubsection{Frequency-encoding и target-encoding}
+
+Для признака с большой кардинальностью \emph{service}
+(\(\sim 13\) уровней) применяется frequency-encoding:
+\begin{equation}
+e_{\text{freq}}(c) = \frac{|\{i : x_i^{(c)} = c\}|}{n_{\text{train}}},
+\label{eq:freq-enc}
+\end{equation}
+а как опциональная альтернатива --- target-encoding со сглаживанием:
+\begin{equation}
+e_{\text{tgt}}(c) =
+\frac{\sum_i \mathbb{I}[x_i^{(c)}=c]\,y_i + \alpha\,\bar{y}}
+     {\sum_i \mathbb{I}[x_i^{(c)}=c] + \alpha},
+\label{eq:tgt-enc}
+\end{equation}
+где \(\bar{y}\) --- средняя метка класса в обучающей выборке, \(\alpha\) ---
+параметр сглаживания. Target-encoding применяется с осторожностью и только
+при кросс-валидационной схеме во избежание утечки.
+
+\subsubsection{Embedding categorical}
+
+В DL-моделях категориальные признаки могут кодироваться обучаемыми
+embeddings \(E_c \in \mathbb{R}^{K \times d_e}\), где \(d_e\) --- размерность
+embedding. Это совместимо с архитектурой CNN-LSTM и, по обзорам
+NIDS-DL~\cite{ferrag2020dlcyber, ahmad2021nids}, даёт прирост качества
+относительно one-hot для признаков большой кардинальности.
+
+\subsection{Преобразования числовых признаков}
+
+\subsubsection{Логарифмическое преобразование}
+
+Признаки с положительной асимметрией и тяжёлыми хвостами (\emph{dur, sbytes,
+dbytes, sload, dload, sintpkt, dintpkt}) подвергаются преобразованию
+\begin{equation}
+\tilde{x} = \log(1 + x).
+\label{eq:log1p}
+\end{equation}
+\(\log(1+x)\) корректно обрабатывает нулевые значения и эквивалентна
+гомеоморфизму, переводящему распределение в близкое к нормальному.
+
+\subsubsection{Robust-scaling}
+
+После логарифмирования признаки масштабируются робастно:
+\begin{equation}
+\tilde{x}' = \frac{\tilde{x} - \operatorname{med}(\tilde{x})}
+                  {\operatorname{IQR}(\tilde{x})},
+\label{eq:robust-scaler}
+\end{equation}
+где \(\operatorname{med}\) --- медиана, \(\operatorname{IQR}\) ---
+интерквартильный размах, оцениваемые \emph{на обучающей выборке}.
+Робастные оценки устойчивы к выбросам, что критично для NIDS, где
+аномалии формируют ``хвосты'' распределения.
+
+\subsubsection{Стандартизация}
+
+Для baseline-моделей (LR, MLP) дополнительно используется стандартизация
+\(z = (x - \mu)/\sigma\). Для DL-моделей эта операция эквивалентна robust-scaling
+с заменой \(\operatorname{med} \to \mu\), \(\operatorname{IQR} \to \sigma\).
+
+\subsection{Формирование скользящих окон}
+
+Для рекуррентных и гибридных моделей (CNN-LSTM, BiLSTM, Transformer)
+исходный поток flow-записей преобразуется в скользящие окна фиксированной
+длины \(W\) с шагом \(S\):
+\[
+\mathcal{W}_t = \bigl(x_{t-W+1}, x_{t-W+2}, \dots, x_t\bigr) \in \mathbb{R}^{W \times d},
+\]
+где \(d\) --- размерность признакового вектора после препроцессинга и
+кодирования.
+
+\subsubsection{Выбор параметров \texorpdfstring{$W$ и $S$}{W и S}}
+
+Параметр \(W\) определяет компромисс между разрешающей способностью по
+времени (короткие \(W\) лучше реагируют на мгновенные всплески) и
+полнотой контекста (длинные \(W\) лучше учитывают slow-атаки). По данным
+обзоров~\cite{vinayakumar2019dl, ferrag2020dlcyber, ahmad2021nids}
+и эталонной работы Kim и соавт.~\cite{kim2016lstm} распространённый диапазон
+для NIDS-окон в flow-представлении --- \(W \in \{8, 16, 32, 64\}\).
+В настоящей работе принят базовый \(W = 32\) с проверкой устойчивости при
+\(W \in \{16, 32, 64\}\) в рамках Эксперимента~1 Этапа~4.
+
+Шаг \(S\) для основного режима принят равным \(S = W/4\) (75\% перекрытие).
+Это согласуется с практикой потокового анализа в NTA: малое \(S\) уменьшает
+TTD, большое --- сокращает вычислительные затраты.
+
+\subsubsection{Целевая разметка окна}
+
+Для бинарной задачи метка окна формируется как
+\begin{equation}
+y_{\mathcal{W}_t} =
+\mathbb{I}\!\left[\sum_{i=t-W+1}^{t} y_i > 0\right],
+\label{eq:window-label}
+\end{equation}
+то есть окно считается атакующим при наличии хотя бы одной атакующей
+записи. Этот вариант принят как основной (\emph{any-positive}); как
+альтернатива в Эксперименте~1 рассматривается \emph{majority-positive}
+(порог по доле атакующих записей).
+
+\subsubsection{Запрет утечки и временной split}
+
+Train/val/test-разделение выполняется при сохранении временного порядка:
+обучающая выборка предшествует валидационной, валидационная ---
+тестовой. При этом запрещено формирование окна, содержащего записи из
+разных сплитов, --- в противном случае возникает утечка
+``из будущего''~\cite{pendlebury2019tesseract}.
+
+\subsection{Управление дисбалансом классов}
+
+UNSW-NB15 в \emph{cleaned}-распределении имеет умеренный дисбаланс
+классов с доминированием \emph{Generic}. Применяемые меры:
+
+\subsubsection{Re-weighting}
+
+Веса классов \(w_c\) обратно пропорциональны их частотам:
+\begin{equation}
+w_c = \frac{n}{|\mathcal{C}|\,n_c},
+\label{eq:reweight}
+\end{equation}
+где \(n_c\) --- число примеров класса \(c\) в обучающей выборке. Веса
+включаются в функцию потерь.
+
+\subsubsection{Focal loss}
+
+Для усиления внимания к ``тяжёлым'' примерам применяется фокальная функция
+потерь~\cite{lin2017focal}:
+\begin{equation}
+\mathcal{L}_{\text{focal}} =
+- \frac{1}{n}\sum_{i=1}^{n}
+  \alpha_{y_i}\,(1-p_{y_i})^{\gamma}\,\log p_{y_i},
+\label{eq:focal}
+\end{equation}
+где \(p_{y_i}\) --- предсказанная вероятность истинного класса,
+\(\alpha\), \(\gamma\) --- параметры фокусировки. Стандартное значение
+\(\gamma = 2{,}0\)~\cite{lin2017focal}.
+
+\subsubsection{SMOTE}
+
+Для классических baseline (LR, RF, XGBoost) применяется
+SMOTE~\cite{chawla2002smote}: для каждой точки миноритарного класса
+\(x_i\) и её \(k\)-ближайшего соседа того же класса \(x_j\) формируется
+синтетическая точка
+\begin{equation}
+x_{\text{new}} = x_i + \lambda\,(x_j - x_i),\quad \lambda \sim U(0, 1).
+\label{eq:smote}
+\end{equation}
+SMOTE не применяется к окончательной DL-обучающей выборке, так как при
+последовательной структуре окон вносит синтетические разрывы во временную
+ось.
+
+\subsection{Контроль дрейфа распределений}
+
+В соответствии с разделом~3 Этапа~1 в pipeline предусматривается отдельный
+блок drift-monitoring, реализующий метрики:
+\begin{itemize}
+    \item \(\PSI\) над выбранными признаками (\eqnref{eq:psi});
+    \item \(\KL\)-расхождение над дискретизованными распределениями;
+    \item \(\MMD\) над непрерывными признаками
+    (\eqnref{eq:mmd}).
+\end{itemize}
+
+Эталонное окно --- начальное окно нормального трафика в обучающей выборке.
+Текущее окно --- скользящее окно того же размера в потоке инференса. При
+превышении пороговых значений хотя бы по одной из метрик активируется
+расширенный режим логирования и (опционально) переобучение модели.
+Конкретные пороги \(\tau_{\PSI} = 0{,}25\), \(\tau_{\MMD}\) (определяется
+по 95-перцентилю распределения MMD на bootstrap-выборках обучающего
+блока) фиксированы и применяются в Эксперименте~5 Этапа~4.
+
+\subsection{Спецификация форматов входов и выходов}
+
+В \tabref{tab:io-spec} приведены спецификации входных и выходных форматов
+системы.
+
+\begin{table}[H]
+\centering
+\caption{Спецификации входных и выходных данных системы}
+\label{tab:io-spec}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{@{}llX@{}}
+\toprule
+\textbf{Назначение} & \textbf{Формат} & \textbf{Содержание} \\
+\midrule
+Сырой поток flow-записей &
+CSV / JSON Lines &
+Поля UNSW-NB15 (49) с типами по \emph{schema.json}; разделитель ``,''; UTF-8 \\
+\addlinespace
+Препроцессированный поток &
+NPZ / Parquet &
+Числовая матрица \(\mathbb{R}^{n \times d}\) после кодирования и масштабирования \\
+\addlinespace
+Окна последовательности &
+NPZ / Parquet &
+Тензор \(\mathbb{R}^{m \times W \times d}\) с метками \(y \in \{0,1\}^m\) \\
+\addlinespace
+Скоринг детектора &
+JSON Lines &
+\texttt{\{ts, score, decision, attack\_cat\_pred, prob, window\_id\}} \\
+\addlinespace
+Алерт &
+JSON Lines / SIEM-event &
+\texttt{\{alert\_id, ts, severity, score, profile, sample\_features\}} \\
+\addlinespace
+Drift-метрика &
+JSON Lines &
+\texttt{\{ts, psi, kl, mmd, ref\_window, cur\_window\}} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Воспроизводимость и контроль конфигурации}
+
+Все шаги pipeline параметризуются конфигурационными YAML-файлами в
+директории \texttt{configs/}:
+
+\begin{itemize}
+    \item \texttt{configs/data/unsw\_nb15.yaml} --- пути, схема, параметры
+    очистки и кодирования;
+    \item \texttt{configs/data/cicids2017.yaml} --- то же для CICIDS2017;
+    \item \texttt{configs/preprocess/default.yaml} --- параметры
+    масштабирования, encoding, windowing;
+    \item \texttt{configs/models/cnn\_lstm.yaml} --- архитектура и
+    гиперпараметры основной модели;
+    \item \texttt{configs/train/default.yaml} --- параметры обучения,
+    seed, логи;
+    \item \texttt{configs/eval/default.yaml} --- метрики, пороги, схема
+    бутстрап-CI.
+\end{itemize}
+
+Каждый запуск экспериментов фиксирует:
+\begin{enumerate}
+    \item версию кода (commit hash);
+    \item набор seed (\(\geq 5\));
+    \item гиперпараметры обучения и препроцессинга;
+    \item версии зависимостей (\texttt{pip freeze});
+    \item полное содержимое использованных конфигов в виде attached-артефактов.
+\end{enumerate}
+
+\subsection{Промежуточные выводы по разделу}
+
+\begin{enumerate}
+    \item Полностью описана схема признаков UNSW-NB15 (5 групп, 49
+    признаков) и зафиксировано подмножество, общее с CICIDS2017
+    (12--14 признаков), пригодное для протокола cross-evaluation.
+    \item Сформирован полный pipeline обработки данных:
+    schema-validation $\to$ cleanup $\to$ encoding (one-hot, frequency,
+    target, embedding) $\to$ scaling (log, robust) $\to$ windowing
+    (\(W=32\), \(S=W/4\)) $\to$ model $\to$ threshold $\to$ alert.
+    Каждая стадия снабжена математическим описанием.
+    \item Зафиксированы меры управления дисбалансом классов: re-weighting,
+    focal loss с параметрами \(\alpha\), \(\gamma\), и SMOTE для классических
+    baseline. Введён запрет временной утечки при формировании окон.
+    \item Описан блок контроля дрейфа на основе метрик PSI, KL, MMD с
+    конкретными пороговыми значениями для эксперимента E5; определены
+    эталонное и текущее окна.
+    \item Зафиксированы спецификации входных и выходных форматов на всех
+    стадиях pipeline и принципы конфигурационного контроля воспроизводимости.
+\end{enumerate}
