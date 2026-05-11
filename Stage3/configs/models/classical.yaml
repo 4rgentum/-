@@ -1,0 +1,37 @@
+# Конфигурация для классических baseline-моделей.
+# Применяется на табличных flow-векторах (без windowing).
+
+logistic_regression:
+  C: 1.0
+  max_iter: 1000
+  class_weight: balanced
+  solver: lbfgs
+
+random_forest:
+  n_estimators: 200
+  max_depth: 20
+  min_samples_split: 2
+  min_samples_leaf: 1
+  class_weight: balanced
+  n_jobs: -1
+
+xgboost:
+  n_estimators: 300
+  max_depth: 8
+  learning_rate: 0.1
+  subsample: 0.8
+  colsample_bytree: 0.8
+  scale_pos_weight: auto
+  tree_method: hist
+  n_jobs: -1
+
+isolation_forest:
+  n_estimators: 200
+  contamination: auto
+  max_samples: 256
+  n_jobs: -1
+
+ocsvm:
+  kernel: rbf
+  gamma: scale
+  nu: 0.05

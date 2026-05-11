@@ -1,0 +1,5 @@
+attack_cat,n,recall
+DoS,39,0.0
+Reconnaissance,140,0.0
+Worms,136,0.0
+Backdoors,303,0.9570957095709571

@@ -1,0 +1,38 @@
+\begin{table}[H]
+\centering
+\caption{Эксперимент E4: качество CNN-LSTM против ИИ-злоумышленника (шаблоны + FSM + drift, 600 тиков).}
+\label{tab:E4-overall}
+\begin{tabular}{ll}
+\toprule
+\textbf{Метрика} & \textbf{Значение} \\
+\midrule
+Precision & 0.970 \\
+Recall    & 0.469 \\
+F1        & 0.632 \\
+FPR       & 0.006 \\
+PR-AUC    & 0.614 \\
+Окон, всего & 2048 \\
+Порог     & 0.6751 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Эксперимент E4: полнота по состояниям FSM-агента.}
+\label{tab:E4-per-state}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Состояние FSM} & \textbf{n} & \textbf{Recall} & \textbf{FPR} \\
+\midrule
+ATTACK\_BRUTE & 30 & 0.000 & --- \\
+ATTACK\_DDOS & 39 & 0.000 & --- \\
+ATTACK\_EXFIL & 303 & 0.957 & --- \\
+ATTACK\_INTREC & 110 & 0.000 & --- \\
+ATTACK\_WORM & 136 & 0.000 & --- \\
+DRIFT\_PRIOR & 216 & --- & 0.019 \\
+NORMAL & 1214 & --- & 0.004 \\
+\bottomrule
+\end{tabular}
+\end{table}

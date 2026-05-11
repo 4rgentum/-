@@ -1,0 +1,31 @@
+name: cicids2017
+
+paths:
+  raw_dir: data/raw/CICIDS2017
+  csv_glob: data/raw/CICIDS2017/*.csv
+  interim_dir: data/interim/cicids
+  processed_dir: data/processed/cicids
+
+# Подмножество признаков, унифицируемое с UNSW-NB15.
+# Маппинг {unsw_name: cicids_column}.
+feature_mapping:
+  dur: "Flow Duration"
+  sbytes: "Total Length of Fwd Packets"
+  dbytes: "Total Length of Bwd Packets"
+  spkts: "Total Fwd Packets"
+  dpkts: "Total Backward Packets"
+  sload: "Fwd Packets/s"
+  dload: "Bwd Packets/s"
+  sinpkt: "Fwd IAT Mean"
+  dinpkt: "Bwd IAT Mean"
+  sjit: "Fwd IAT Std"
+  djit: "Bwd IAT Std"
+  # CICIDS2017 (CICFlowMeter) does not export 'Protocol' as a column;
+  # 'Destination Port' is used as the closest functional analogue.
+  service: "Destination Port"
+
+# CICIDS column names contain leading whitespace (' Label', ' Flow Duration', ...);
+# the loader strips those at read time.
+
+label_column: "Label"
+benign_label: "BENIGN"

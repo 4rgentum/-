@@ -1,0 +1,26 @@
+name: bilstm
+type: dl_supervised
+
+architecture:
+  input_features: 60
+  window_size: 32
+
+  lstm:
+    hidden_size: 128
+    num_layers: 2
+    dropout: 0.2
+    bidirectional: true
+
+  attention:
+    enabled: true
+    num_heads: 1
+
+  head:
+    type: mlp
+    hidden_dims: [128, 64]
+    dropout: 0.3
+    activation: relu
+
+  output:
+    num_classes: 2
+    activation: sigmoid

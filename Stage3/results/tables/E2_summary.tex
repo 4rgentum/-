@@ -1,0 +1,37 @@
+\begin{table}[H]
+\centering
+\caption{Эксперимент E2: матрица ошибок CNN-LSTM на тестовой выборке UNSW-NB15.}
+\label{tab:E2-confusion}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Истинное / Предсказанное} & \textbf{normal (0)} & \textbf{attack (1)} \\
+\midrule
+normal (0) & 6957 & 71 \\
+attack (1) & 6531 & 8355 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Эксперимент E2: полнота CNN-LSTM по классам атак UNSW-NB15 (отсортировано по возрастанию recall).}
+\label{tab:E2-per-attack}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lrrr}
+\toprule
+\textbf{attack\_cat} & \textbf{support} & \textbf{recall} & \textbf{FN} \\
+\midrule
+Shellcode & 94 & 0.500 & 47 \\
+Analysis & 165 & 0.539 & 76 \\
+Worms & 11 & 0.545 & 5 \\
+Backdoor & 154 & 0.545 & 70 \\
+Generic & 3342 & 0.555 & 1487 \\
+DoS & 1076 & 0.559 & 474 \\
+Exploits & 2885 & 0.561 & 1267 \\
+Normal & 4803 & 0.562 & 2103 \\
+Reconnaissance & 903 & 0.570 & 388 \\
+Fuzzers & 1453 & 0.577 & 614 \\
+\bottomrule
+\end{tabular}
+\end{table}

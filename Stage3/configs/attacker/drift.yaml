@@ -1,0 +1,35 @@
+name: drift_injector
+
+# Параметры трёх типов дрейфа.
+# Используются в зависимости от drift_kind состояния FSM (covariate | prior | concept).
+
+covariate:
+  features: [dur, sbytes, dbytes, sinpkt, dinpkt]
+  shift_mean_factor: 1.5
+  shift_std_factor: 1.2
+  ramp_up_seconds: 60         # плавный набор интенсивности
+
+prior:
+  attack_ratio_target: 0.20   # доля атакующих относительно нормы
+  reweight_per_class:
+    DDOS: 0.25
+    SCAN: 0.25
+    BRUTE: 0.10
+    EXPLOIT: 0.10
+    EXFIL: 0.10
+    INTREC: 0.10
+    WORM: 0.10
+
+concept:
+  attack_template: ddos
+  param_overrides:
+    intensity_pps_min: 50     # понижение интенсивности — атака маскируется под норму
+    intensity_pps_max: 200
+    syn_ratio: 0.6
+  ramp_up_seconds: 90
+
+monitoring:
+  reference_window_size: 5000
+  current_window_size: 1000
+  psi_target_max: 0.25
+  mmd_target_quantile: 0.95

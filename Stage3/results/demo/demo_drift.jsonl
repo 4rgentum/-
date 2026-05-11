@@ -1,0 +1,10 @@
+{"psi": 0.26718310296165637, "kl": 0.1819163977270265, "mmd": 0.5754287281774245, "drift_alarm": true, "chunk_start": 0, "chunk_end": 821, "fsm_state_majority": "NORMAL"}
+{"psi": 0.20707140901118237, "kl": 0.07877538265620425, "mmd": 0.2529712822336556, "drift_alarm": false, "chunk_start": 821, "chunk_end": 1642, "fsm_state_majority": "ATTACK_INTREC"}
+{"psi": 0.2615876652670899, "kl": 0.17455584277924807, "mmd": 0.570662766314121, "drift_alarm": true, "chunk_start": 1642, "chunk_end": 2463, "fsm_state_majority": "DRIFT_PRIOR"}
+{"psi": 0.2612912999160136, "kl": 0.18480602006801156, "mmd": 0.5735654466854953, "drift_alarm": true, "chunk_start": 2463, "chunk_end": 3284, "fsm_state_majority": "DRIFT_PRIOR"}
+{"psi": 0.26418991540950443, "kl": 0.20212319861734748, "mmd": 0.5769573024368562, "drift_alarm": true, "chunk_start": 3284, "chunk_end": 4105, "fsm_state_majority": "DRIFT_PRIOR"}
+{"psi": 0.2750300460812316, "kl": 0.12817798756673035, "mmd": 0.36619671127190423, "drift_alarm": true, "chunk_start": 4105, "chunk_end": 4926, "fsm_state_majority": "NORMAL"}
+{"psi": 0.2569016770851068, "kl": 0.1708046097966096, "mmd": 0.3307672592724792, "drift_alarm": true, "chunk_start": 4926, "chunk_end": 5747, "fsm_state_majority": "NORMAL"}
+{"psi": 0.2606028945492757, "kl": 0.1620516992284058, "mmd": 0.16976283169227446, "drift_alarm": true, "chunk_start": 5747, "chunk_end": 6568, "fsm_state_majority": "NORMAL"}
+{"psi": 0.15368030831913485, "kl": 0.03931581634595928, "mmd": 0.39858414043620605, "drift_alarm": false, "chunk_start": 6568, "chunk_end": 7389, "fsm_state_majority": "ATTACK_EXFIL"}
+{"psi": 0.1547417057109129, "kl": 0.03907195315476182, "mmd": 0.38255969356561326, "drift_alarm": false, "chunk_start": 7389, "chunk_end": 8210, "fsm_state_majority": "ATTACK_EXFIL"}

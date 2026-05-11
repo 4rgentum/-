@@ -1,0 +1,43 @@
+metrics:
+  classification:
+    - precision
+    - recall
+    - f1
+    - mcc
+    - fpr
+  integral:
+    - roc_auc
+    - pr_auc
+  operational:
+    - latency_ms_p50
+    - latency_ms_p95
+    - throughput_eps
+    - fp_per_minute
+
+calibration:
+  enabled: true
+  method: temperature   # temperature | platt | isotonic
+  ece_n_bins: 15
+
+thresholding:
+  strategy: target_fpr  # target_fpr | target_recall | f1_max
+  target_fpr: 0.01
+  target_recall: 0.85
+
+bootstrap:
+  enabled: true
+  n_iterations: 1000
+  ci: 0.95
+
+statistical_tests:
+  paired_test: wilcoxon
+  alpha: 0.05
+
+drift:
+  enabled: true
+  metrics: [psi, kl, mmd]
+  ref_window_size: 5000
+  cur_window_size: 1000
+  psi_threshold: 0.25
+  mmd_kernel: rbf
+  mmd_kernel_bandwidth: median

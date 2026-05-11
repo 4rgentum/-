@@ -1,0 +1,16 @@
+name: vae
+type: dl_semi_supervised
+
+architecture:
+  input_features: 60
+  window_size: 32
+  encoder_dims: [256, 128, 64]
+  latent_dim: 16
+  decoder_dims: [64, 128, 256]
+  dropout: 0.1
+  activation: relu
+  kl_weight: 0.1
+
+scoring:
+  metric: elbo
+  threshold_quantile: 0.99

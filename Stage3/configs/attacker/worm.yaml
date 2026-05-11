@@ -1,0 +1,15 @@
+name: worm_lateral
+attack_cat: Worms
+
+params:
+  flows_per_period: 30
+  period_seconds: 10
+  proto: tcp
+  flow_duration_ms:
+    mean: 600
+    std: 200
+  bytes_per_flow:
+    mean: 1500
+    std: 400
+  destination_diversity: 50
+  periodicity_seconds: 10

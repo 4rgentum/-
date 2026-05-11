@@ -1,0 +1,16 @@
+name: brute_force
+attack_cat: Reconnaissance
+
+params:
+  attempts_per_minute:
+    min: 30
+    max: 120
+  target_ports: [22, 3389, 80, 443]
+  proto: tcp
+  bytes_per_attempt:
+    mean: 200
+    std: 50
+  success_rate: 0.02           # доля «удачных» попыток
+  inter_attempt_jitter_ms:
+    min: 500
+    max: 1500

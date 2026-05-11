@@ -1,0 +1,19 @@
+name: ddos_synflood
+attack_cat: DoS
+
+params:
+  intensity_pps:
+    min: 800
+    max: 4000
+  syn_ratio: 0.92
+  duration_seconds:
+    min: 5
+    max: 25
+  source_ip_diversity: 50      # число уникальных source IP
+  target_port: 80
+  proto: tcp
+  state: REQ
+  packet_size_bytes:
+    mean: 60
+    std: 8
+  ttl_source: 64

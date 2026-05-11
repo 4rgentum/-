@@ -1,0 +1,14 @@
+name: internal_recon
+attack_cat: Reconnaissance
+
+params:
+  destinations_per_period: 60
+  period_seconds: 30
+  proto: tcp
+  flow_duration_ms:
+    mean: 250
+    std: 80
+  bytes_per_flow:
+    mean: 800
+    std: 200
+  fan_out_pattern: scan        # scan | enumerate

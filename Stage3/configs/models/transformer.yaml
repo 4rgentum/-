@@ -1,0 +1,27 @@
+name: transformer
+type: dl_supervised
+
+architecture:
+  input_features: 60
+  window_size: 32
+
+  embedding_dim: 128
+  positional_encoding: sinusoidal
+
+  encoder:
+    num_layers: 3
+    num_heads: 4
+    ff_dim: 256
+    dropout: 0.2
+
+  pooling: mean   # mean | cls | last
+
+  head:
+    type: mlp
+    hidden_dims: [128, 64]
+    dropout: 0.3
+    activation: relu
+
+  output:
+    num_classes: 2
+    activation: sigmoid

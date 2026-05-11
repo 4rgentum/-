@@ -1,0 +1,70 @@
+name: unsw_nb15
+
+paths:
+  raw_dir: data/raw/UNSW-NB15
+  train_csv: data/raw/UNSW-NB15/UNSW_NB15_training-set.csv
+  test_csv: data/raw/UNSW-NB15/UNSW_NB15_testing-set.csv
+  interim_dir: data/interim/unsw
+  processed_dir: data/processed/unsw
+
+schema:
+  numeric:
+    - dur
+    - rate
+    - sbytes
+    - dbytes
+    - sttl
+    - dttl
+    - sloss
+    - dloss
+    - sload
+    - dload
+    - spkts
+    - dpkts
+    - swin
+    - dwin
+    - stcpb
+    - dtcpb
+    - smean
+    - dmean
+    - trans_depth
+    - response_body_len
+    - sjit
+    - djit
+    - sinpkt
+    - dinpkt
+    - tcprtt
+    - synack
+    - ackdat
+  categorical:
+    - proto
+    - service
+    - state
+  binary_flags:
+    - is_sm_ips_ports
+    - is_ftp_login
+  context_counts:
+    - ct_state_ttl
+    - ct_flw_http_mthd
+    - ct_ftp_cmd
+    - ct_srv_src
+    - ct_srv_dst
+    - ct_dst_ltm
+    - ct_src_ltm
+    - ct_src_dport_ltm
+    - ct_dst_sport_ltm
+    - ct_dst_src_ltm
+  label_binary: label
+  label_multiclass: attack_cat
+
+attack_categories:
+  - Normal
+  - Fuzzers
+  - Analysis
+  - Backdoors
+  - DoS
+  - Exploits
+  - Generic
+  - Reconnaissance
+  - Shellcode
+  - Worms

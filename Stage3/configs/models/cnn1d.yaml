@@ -1,0 +1,29 @@
+name: cnn1d
+type: dl_supervised
+
+architecture:
+  input_features: 60
+  window_size: 32
+  conv_blocks:
+    - out_channels: 64
+      kernel_size: 3
+      padding: same
+      pool_size: 2
+      dropout: 0.1
+    - out_channels: 128
+      kernel_size: 3
+      padding: same
+      pool_size: 2
+      dropout: 0.1
+    - out_channels: 128
+      kernel_size: 3
+      padding: same
+      pool_size: 2
+      dropout: 0.1
+  global_pool: mean
+  head:
+    hidden_dims: [128, 64]
+    dropout: 0.3
+  output:
+    num_classes: 2
+    activation: sigmoid

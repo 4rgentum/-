@@ -1,0 +1,56 @@
+cleanup:
+  fillna_categorical: "-"
+  fillna_numeric: 0.0
+  outlier_clip_quantile_low: 0.001
+  outlier_clip_quantile_high: 0.999
+  drop_duplicates: true
+  duplicates_subset: null  # null = full row
+
+encoding:
+  categorical_low_card_threshold: 16
+  low_card_strategy: onehot
+  high_card_strategy: frequency  # frequency | target | embedding
+  target_smoothing_alpha: 10.0
+
+scaling:
+  log_transform_features:
+    - dur
+    - rate
+    - sbytes
+    - dbytes
+    - sload
+    - dload
+    - sjit
+    - djit
+    - sinpkt
+    - dinpkt
+    - smean
+    - dmean
+    - response_body_len
+  scaler: robust  # robust | standard | minmax
+  with_centering: true
+  with_scaling: true
+
+windowing:
+  enabled: true
+  window_size: 32
+  stride: 8           # S = W/4
+  # UNSW-NB15 cleaned partition lacks a natural temporal ordering (rows are
+  # grouped by attack_cat). After per-split shuffling, 'last' is the only
+  # aggregation that preserves the original class balance: the label of a
+  # window is the label of its terminating record. 'any' / 'majority' would
+  # collapse to a single class because attacks dominate by ~68%.
+  label_aggregation: last
+  majority_threshold: 0.5
+
+splits:
+  strategy: temporal  # temporal | random | official
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+
+balancing:
+  enabled: true
+  method: class_weights  # class_weights | smote | none
+  smote_k_neighbors: 5
+  smote_sampling_strategy: 0.5

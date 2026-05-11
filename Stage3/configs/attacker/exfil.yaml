@@ -1,0 +1,17 @@
+name: data_exfil
+attack_cat: Backdoors
+
+params:
+  session_duration_seconds:
+    min: 60
+    max: 600
+  bytes_out_per_second:
+    mean: 50000
+    std: 10000
+  bytes_in_per_second:
+    mean: 200
+    std: 50
+  proto: tcp
+  target_port: 443
+  state: CON
+  steady_rate: true

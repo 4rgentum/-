@@ -1,0 +1,11 @@
+name: mlp
+type: dl_supervised
+
+architecture:
+  input_features: 60
+  hidden_dims: [256, 128, 64]
+  dropout: 0.3
+  activation: relu
+  output:
+    num_classes: 2
+    activation: sigmoid

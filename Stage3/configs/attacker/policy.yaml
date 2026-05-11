@@ -1,0 +1,116 @@
+# Политика конечного автомата ИИ-злоумышленника.
+# Состояния и вероятности переходов.
+
+seed: 42
+duration_seconds: 600          # длительность прогона
+tick_interval_seconds: 1.0
+samples_per_tick:
+  min: 5
+  max: 50
+
+states:
+  - name: NORMAL
+    min_duration_seconds: 30
+    max_duration_seconds: 120
+    transitions:
+      NORMAL: 0.55
+      ATTACK_DDOS: 0.08
+      ATTACK_SCAN: 0.08
+      ATTACK_BRUTE: 0.06
+      ATTACK_EXPLOIT: 0.05
+      ATTACK_EXFIL: 0.05
+      ATTACK_INTREC: 0.05
+      ATTACK_WORM: 0.04
+      DRIFT_COV: 0.02
+      DRIFT_PRIOR: 0.01
+      DRIFT_CONCEPT: 0.01
+
+  - name: ATTACK_DDOS
+    template: ddos
+    template_config: configs/attacker/ddos.yaml
+    min_duration_seconds: 5
+    max_duration_seconds: 30
+    transitions:
+      NORMAL: 0.9
+      ATTACK_DDOS: 0.1
+
+  - name: ATTACK_SCAN
+    template: scan
+    template_config: configs/attacker/scan.yaml
+    min_duration_seconds: 10
+    max_duration_seconds: 45
+    transitions:
+      NORMAL: 0.85
+      ATTACK_SCAN: 0.15
+
+  - name: ATTACK_BRUTE
+    template: brute
+    template_config: configs/attacker/brute.yaml
+    min_duration_seconds: 10
+    max_duration_seconds: 30
+    transitions:
+      NORMAL: 0.9
+      ATTACK_BRUTE: 0.1
+
+  - name: ATTACK_EXPLOIT
+    template: exploit
+    template_config: configs/attacker/exploit.yaml
+    min_duration_seconds: 5
+    max_duration_seconds: 15
+    transitions:
+      NORMAL: 0.95
+      ATTACK_EXPLOIT: 0.05
+
+  - name: ATTACK_EXFIL
+    template: exfil
+    template_config: configs/attacker/exfil.yaml
+    min_duration_seconds: 30
+    max_duration_seconds: 120
+    transitions:
+      NORMAL: 0.85
+      ATTACK_EXFIL: 0.15
+
+  - name: ATTACK_INTREC
+    template: intrec
+    template_config: configs/attacker/intrec.yaml
+    min_duration_seconds: 15
+    max_duration_seconds: 60
+    transitions:
+      NORMAL: 0.9
+      ATTACK_INTREC: 0.1
+
+  - name: ATTACK_WORM
+    template: worm
+    template_config: configs/attacker/worm.yaml
+    min_duration_seconds: 20
+    max_duration_seconds: 60
+    transitions:
+      NORMAL: 0.9
+      ATTACK_WORM: 0.1
+
+  - name: DRIFT_COV
+    drift_kind: covariate
+    drift_config: configs/attacker/drift.yaml
+    min_duration_seconds: 60
+    max_duration_seconds: 180
+    transitions:
+      NORMAL: 0.7
+      DRIFT_COV: 0.3
+
+  - name: DRIFT_PRIOR
+    drift_kind: prior
+    drift_config: configs/attacker/drift.yaml
+    min_duration_seconds: 60
+    max_duration_seconds: 180
+    transitions:
+      NORMAL: 0.7
+      DRIFT_PRIOR: 0.3
+
+  - name: DRIFT_CONCEPT
+    drift_kind: concept
+    drift_config: configs/attacker/drift.yaml
+    min_duration_seconds: 60
+    max_duration_seconds: 180
+    transitions:
+      NORMAL: 0.7
+      DRIFT_CONCEPT: 0.3

@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "diploma-nids"
+version = "0.1.0"
+description = "Methodology for detecting unauthorized actions and anomalous activity in corporate networks using neural networks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Diploma NIDS" }]
+keywords = ["nids", "ids", "unsw-nb15", "cicids2017", "cnn-lstm", "anomaly-detection"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scikit-learn>=1.3,<2.0",
+    "scipy>=1.10,<2.0",
+    "torch>=2.0,<3.0",
+    "xgboost>=1.7,<3.0",
+    "imbalanced-learn>=0.11",
+    "pydantic>=2.0,<3.0",
+    "PyYAML>=6.0",
+    "matplotlib>=3.7",
+    "seaborn>=0.12",
+    "tqdm>=4.65",
+    "fastapi>=0.104",
+    "uvicorn[standard]>=0.24",
+    "streamlit>=1.28",
+    "requests>=2.31",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.1.0",
+    "mypy>=1.5",
+    "ipykernel>=6.25",
+    "jupyterlab>=4.0",
+]
+
+[project.scripts]
+diploma-train = "diploma_nids.cli:train"
+diploma-eval = "diploma_nids.cli:evaluate"
+diploma-attack = "diploma_nids.cli:run_attacker"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["diploma_nids*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --strict-markers"
