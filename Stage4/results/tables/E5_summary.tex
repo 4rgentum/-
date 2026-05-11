@@ -1,0 +1,22 @@
+\begin{table}[H]
+\centering
+\caption{Эксперимент E5: устойчивость CNN-LSTM к дрейфу распределений.}
+\label{tab:E5-drift}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lrrrrrl}
+\toprule
+\textbf{Тип} & \textbf{Интенсивность} & \textbf{F1} & \textbf{PR-AUC} & \textbf{PSI} & \textbf{MMD} & \textbf{drift\_alarm} \\
+\midrule
+covariate & 0.00 & 0.000 & 0.287 & 0.310 & 0.2103 & yes \\
+covariate & 0.25 & 0.000 & 0.287 & 0.311 & 0.2173 & yes \\
+covariate & 0.50 & 0.000 & 0.287 & 0.310 & 0.2125 & yes \\
+covariate & 0.75 & 0.000 & 0.287 & 0.308 & 0.2117 & yes \\
+covariate & 1.00 & 0.000 & 0.287 & 0.310 & 0.2096 & yes \\
+concept & 0.00 & 0.000 & 0.287 & 0.310 & 0.2175 & yes \\
+concept & 0.25 & 0.000 & 0.287 & 0.312 & 0.2117 & yes \\
+concept & 0.50 & 0.000 & 0.287 & 0.312 & 0.2071 & yes \\
+concept & 0.75 & 0.000 & 0.287 & 0.313 & 0.2160 & yes \\
+concept & 1.00 & 0.000 & 0.287 & 0.316 & 0.2131 & yes \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,356 @@
+% =====================================================================
+%  Приложение к ВКР: рекомендации по интеграции и практическому
+%  применению разработанной методики в корпоративных сетях.
+%
+%  Сборка: xelatex -> biber -> xelatex -> xelatex
+%  Преамбула общая со Stage1.
+% =====================================================================
+\documentclass[14pt, a4paper]{extarticle}
+
+\input{../Stage1/preamble/packages}
+\input{../Stage1/preamble/style_gost}
+\input{../Stage1/preamble/commands}
+
+\addbibresource{../Stage1/bib/refs.bib}
+
+\hypersetup{
+    pdftitle={Рекомендации по интеграции и применению},
+    pdfsubject={NIDS, SOC integration, NetFlow, IPFIX, Kafka, FastAPI},
+}
+
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{1cm}
+{\large\bfseries Приложение к выпускной квалификационной работе}\\[0.5cm]
+\rule{\linewidth}{0.4pt}\\[0.5cm]
+{\Large\bfseries Рекомендации по интеграции и практическому применению
+методики обнаружения несанкционированных действий в корпоративных
+сетях}\\[0.5cm]
+\rule{\linewidth}{0.4pt}\\[2cm]
+
+\vfill
+{\large \the\year}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section*{ВВЕДЕНИЕ}
+\addcontentsline{toc}{section}{ВВЕДЕНИЕ}
+
+Документ содержит инженерные рекомендации по внедрению разработанной
+методики обнаружения несанкционированных действий в продуктивную
+инфраструктуру корпоративной сети. Рекомендации сформированы по
+результатам экспериментов E1--E6 настоящей ВКР и согласуются с практикой
+эксплуатации NTA-подсистем SOC.
+
+% =====================================================================
+\section{Архитектура развёртывания}
+
+\subsection{Поточная схема}
+
+В типовой корпоративной инфраструктуре прототип развёртывается между
+сборщиками сетевой телеметрии и подсистемой алертирования SIEM/SOAR:
+
+\begin{equation*}
+\boxed{\text{Network sensors} \to \text{Collector} \to \text{Bus}
+\to \text{Detector} \to \text{Alert sink}}
+\end{equation*}
+
+\begin{itemize}
+    \item \textbf{Network sensors:} зеркальные SPAN-порты на ядре
+    коммутации, сетевые TAP-устройства или host-based агенты типа
+    \texttt{filebeat}/\texttt{nProbe}/\texttt{Zeek}.
+    \item \textbf{Collector:} стандартные приёмники NetFlow/IPFIX
+    (см. \cite{rfc3954, rfc7011}), напр. \texttt{nProbe Cento},
+    \texttt{ntopng}, \texttt{Elastiflow}.
+    \item \textbf{Bus:} потоковая очередь (\texttt{Apache Kafka},
+    \texttt{NATS}, \texttt{Redis Streams}) для развязки сбора и анализа.
+    \item \textbf{Detector:} FastAPI-сервис прототипа (\texttt{POST /score})
+    в одном или нескольких репликах за \texttt{nginx}/HAProxy.
+    \item \textbf{Alert sink:} SIEM (\texttt{Splunk, Elastic, QRadar})
+    или SOAR-платформа, принимающая JSON-алерты по REST/Kafka.
+\end{itemize}
+
+\subsection{Минимальная конфигурация для пилота}
+
+\begin{table}[H]
+\centering
+\caption{Минимальные требования к стенду пилотного развёртывания}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{ll}
+\toprule
+\textbf{Компонент} & \textbf{Минимум} \\
+\midrule
+CPU      & 4 ядра, AVX2 \\
+RAM      & 8 GB \\
+Диск     & 50 GB SSD (logs/checkpoints) \\
+ОС       & Ubuntu 22.04 LTS / RHEL 9 / Windows 11 \\
+Python   & 3.10--3.13 \\
+GPU      & не обязательна; ускоряет обучение, не инференс \\
+Сеть     & 1 Gbps (для приёма IPFIX) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Эксперимент~E6 показал latency CNN-LSTM 0{,}96\,мс/окно на CPU при
+batch\,$=$\,1; такая конфигурация поддерживает порядка тысяч
+flow-в-секунду без батчирования и десятки тысяч с батчированием.
+
+% =====================================================================
+\section{Подключение источников трафика}
+
+\subsection{NetFlow / IPFIX (рекомендуемый формат)}
+
+Сборщик настраивается на экспорт всех 49 полей UNSW-NB15-схемы либо
+её подмножества, общего с CICIDS2017 (12 признаков, см. Stage~2
+§2.2). Минимальный набор полей, без которого инференс невозможен:
+
+\begin{itemize}
+    \item длительность потока (\emph{Flow Duration}),
+    \item байты и пакеты в обе стороны
+    (\emph{Total Length of Fwd/Bwd Packets}, \emph{Total Fwd/Bwd Packets}),
+    \item межпакетные интервалы (\emph{Fwd/Bwd IAT Mean/Std}),
+    \item TCP-флаги и состояние сессии (\emph{state}).
+\end{itemize}
+
+Маппинг IPFIX-полей в схему модели зафиксирован в
+\verb|configs/data/unsw_nb15.yaml| и \verb|configs/data/cicids2017.yaml|.
+
+\subsection{Сырые pcap-источники}
+
+При наличии pcap-источников (например, по SPAN-портам) рекомендуется
+извлекать flow-признаки утилитой \texttt{CICFlowMeter} либо
+\texttt{Argus}: их выходные форматы напрямую совместимы с
+\verb|configs/data/cicids2017.yaml|. Для UNSW-NB15-совместимого формата
+доступен \texttt{nfdump}/\texttt{nfcapd} или скрипт извлечения,
+поставляемый авторами датасета~\cite{moustafa2015unsw}.
+
+\subsection{Endpoint-агенты}
+
+При невозможности зеркалирования трафика на ядре можно использовать
+host-based сборщики (\texttt{filebeat/IPFIX module},
+\texttt{osquery + processes}, \texttt{Zeek conn.log}). Признаковый
+вектор формируется на агенте или collector-стороне и отправляется в
+Kafka-топик \texttt{nids.flows.v1}.
+
+% =====================================================================
+\section{Формирование и приоритизация алертов}
+
+\subsection{Уровни severity}
+
+Прототип реализует пятиступенчатую шкалу \emph{severity}, привязанную
+к нормированному превышению скоринга над порогом:
+\[
+e = \frac{s(x) - \tau}{1 - \tau},
+\quad
+\text{severity} =
+\begin{cases}
+\text{info},     & s < \tau \\
+\text{low},      & 0 \le e < 0{,}1 \\
+\text{medium},   & 0{,}1 \le e < 0{,}3 \\
+\text{high},     & 0{,}3 \le e < 0{,}6 \\
+\text{critical}, & e \ge 0{,}6
+\end{cases}
+\]
+
+Это позволяет аналитику SOC расставить приоритеты обработки без
+дополнительных правил корреляции.
+
+\subsection{Дедупликация и шумоподавление}
+
+\texttt{AlertFormer} реализует временное окно дедупликации
+(\(\Delta t = 5\)\,с по умолчанию): два алерта с одним и тем же
+\emph{attack\_cat\_pred} и \emph{severity} в пределах окна
+объединяются в один. На демо-прогоне (300 тиков, 8\,219 записей)
+зафиксировано всего \textbf{30 алертов} --- эксплуатационно
+приемлемая нагрузка.
+
+\subsection{Структура алерта}
+
+Формат JSON (одно событие = одна строка):
+
+\begin{lstlisting}[basicstyle=\ttfamily\small]
+{
+    "alert_id": "alert-00000001",
+    "ts": 1778468472.378,
+    "severity": "medium",
+    "score": 0.7102,
+    "decision": 1,
+    "fsm_state": "ATTACK_DDOS",
+    "attack_cat_pred": "DoS",
+    "profile": { "tick": 60, "...": "..." }
+}
+\end{lstlisting}
+
+Поле \texttt{profile} переносится в SIEM как нативный объект; ключи
+позволяют автоматически связать алерт с источником и тип-таксономией
+SOC (например, MITRE ATT\&CK\cite{mitreattack}).
+
+% =====================================================================
+\section{Калибровка порогов и переобучение}
+
+\subsection{Целевой режим эксплуатации}
+
+В E3 порог \(\tau\) откалиброван на валидационной выборке под
+целевой FPR\,$=$\,0{,}01. Для конкретной инфраструктуры рекомендуется:
+
+\begin{enumerate}
+    \item Зафиксировать допустимый объём FP-в-сутки на основе
+    производительности команды SOC (типовое значение:
+    \(\leq 50\) тяжёлых алертов на одного аналитика в смену).
+    \item Перевести его в FP-per-time, разделив на средний поток
+    flow-в-сутки коллектора.
+    \item Использовать \texttt{find\_threshold\_for\_target\_fpr} на
+    производственной валидационной выборке для подбора \(\tau\).
+    \item Применять температурное масштабирование
+    (\texttt{TemperatureScaler}) для согласования \(\hat{p}(y|x)\) с
+    эмпирической вероятностью.
+\end{enumerate}
+
+\subsection{Drift-monitoring и автоматическое переобучение}
+
+Блок \texttt{drift\_report} в эксплуатации формирует одну метрику
+PSI/MMD на каждые \(N\)\,тыс. flow. Рекомендованные действия по уровням:
+
+\begin{itemize}
+    \item \(\text{PSI} \le 0{,}1\): нет необходимости в действиях.
+    \item \(0{,}1 < \text{PSI} \le 0{,}25\): включается расширенное
+    логирование, аналитик уведомляется.
+    \item \(\text{PSI} > 0{,}25\): запускается процедура
+    переобучения на свежей валидационной выборке; до переобучения
+    severity повышается на одну ступень (компенсация снижения PR-AUC).
+\end{itemize}
+
+\subsection{Циклы переобучения}
+
+Регулярное переобучение --- раз в квартал на накопленной
+размеченной выборке; экстренное --- по факту срабатывания
+drift-monitor. Размеры выборок --- не менее train-партиции UNSW-NB15
+(\(\sim 80\,000\) flows) для устойчивого качества.
+
+% =====================================================================
+\section{Безопасность и приватность}
+
+\subsection{Принцип ``данные не покидают периметр''}
+
+Прототип не передаёт сырые признаки во внешние сервисы. Все артефакты
+(\texttt{preprocessor.json}, чекпойнты \texttt{models/*.pt}) хранятся
+локально и шифруются на уровне диска (LUKS / BitLocker).
+
+\subsection{Аутентификация REST-API}
+
+В пилотном развёртывании рекомендуется поставить FastAPI за
+reverse-proxy с mTLS либо использовать встроенную в FastAPI
+авторизацию по API-token. Без аутентификации сервис не должен быть
+доступен из внешних сегментов.
+
+\subsection{Аудит}
+
+Все алерты дублируются в \texttt{experiments/runs/realtime\_alerts.jsonl}
+для офлайн-аудита. Drift-readings --- в
+\texttt{realtime\_drift.jsonl}. Журналы выбрасываются в SIEM
+без изменения.
+
+% =====================================================================
+\section{Развёртывание в Docker / Kubernetes}
+
+\subsection{Docker Compose (рекомендуется для пилота)}
+
+\begin{lstlisting}[basicstyle=\ttfamily\small]
+version: "3.9"
+services:
+  detector:
+    image: diploma-nids:0.1.0
+    command: uvicorn diploma_nids.inference.service:app --host 0.0.0.0 --port 8000
+    environment:
+      DIPLOMA_MODEL_YAML: configs/models/cnn_lstm.yaml
+      DIPLOMA_CHECKPOINT: models/cnn_lstm_seed42.pt
+      DIPLOMA_PREPROCESSOR: data/processed/unsw/preprocessor.json
+      DIPLOMA_THRESHOLD: "0.675"
+    volumes:
+      - ./models:/app/models:ro
+      - ./data/processed:/app/data/processed:ro
+      - ./experiments/runs:/app/experiments/runs
+    ports: [ "8000:8000" ]
+
+  ui:
+    image: diploma-nids:0.1.0
+    command: streamlit run src/diploma_nids/ui/streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+    environment:
+      DIPLOMA_API_URL: http://detector:8000
+    ports: [ "8501:8501" ]
+    depends_on: [ detector ]
+\end{lstlisting}
+
+\subsection{Масштабирование}
+
+Поскольку инференс stateless (за исключением \texttt{WindowScorer},
+который держит rolling buffer per-client), сервис горизонтально
+масштабируется. Sharding по \texttt{src\_ip} либо по \texttt{client\_id}
+обеспечивает корректность буферов.
+
+% =====================================================================
+\section{Воспроизводимость экспериментов}
+
+Полный воспроизводимый цикл одной командой:
+
+\begin{lstlisting}[basicstyle=\ttfamily\small, language=bash]
+make install-dev
+python scripts/02_build_dataset.py \
+    --config configs/data/unsw_nb15.yaml \
+    --preprocess configs/preprocess/default.yaml \
+    --strategy official
+python scripts/10_run_experiment_E1.py \
+    --train configs/train/full.yaml --seeds 42 123 2024
+python scripts/11_run_experiment_E2_error_analysis.py
+python scripts/12_run_experiment_E4_attacker.py
+python scripts/13_run_experiment_E5_drift.py
+python scripts/20_build_thesis_tables.py
+python scripts/22_parse_training_logs.py
+python scripts/21_plot_training_history.py
+python scripts/30_demo_run.py
+\end{lstlisting}
+
+Все артефакты сохраняются в \texttt{results/} и \texttt{experiments/};
+seeds фиксированы и согласованы между скриптами.
+
+% =====================================================================
+\section{Ограничения и направления развития}
+
+\subsection{Ограничения текущего прототипа}
+
+\begin{itemize}
+    \item Модель обучена на UNSW-NB15 (\(\sim 70\,\text{тыс.}\) flow);
+    для продуктивной среды требуется fine-tuning на свежем трафике.
+    \item Шаблоны ИИ-злоумышленника находятся в домене,
+    отличающемся от UNSW по маргинальным распределениям (E5 показал
+    PSI > 0{,}25 во всех точках). Необходима калибровка шаблонов
+    под целевую инфраструктуру.
+    \item TLS-инспекция и работа на пакетном уровне не реализованы;
+    методика ориентирована на flow-уровень.
+\end{itemize}
+
+\subsection{Направления развития}
+
+\begin{itemize}
+    \item \textbf{cGAN-составляющая агента}: замена части шаблонов
+    обученной cGAN-моделью для более реалистичного синтетического
+    трафика;
+    \item \textbf{Cross-evaluation на CICIDS2017} в полном объёме с
+    дообучением на 10\% выборки CICIDS;
+    \item \textbf{Расширение на pcap-уровень} с использованием полного
+    UNSW-NB15\_1..4.csv (\(\sim 2{,}5\,\text{млн}\) записей);
+    \item \textbf{Поддержка дополнительных датасетов} (TON\_IoT,
+    Bot-IoT, LITNET-2020) для проверки переносимости;
+    \item \textbf{Online-обучение} с использованием
+    EWC/replay-buffer для адаптации к concept drift без полного
+    переобучения.
+\end{itemize}
+
+% =====================================================================
+\printbibliography[title={СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ}]
+
+\end{document}
